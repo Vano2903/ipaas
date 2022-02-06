@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="it">
+
+<head>
+    <meta charset="UTF-8">
+    <!-- <link rel="stylesheet" href="style.css"> -->
+    <title>quizzzz</title>
+
+</head>
+
+<body>
+    <!--<script src="http://sagiri.altervista.org/quizz/script.js"></script>-->
+
+    <form>
+        <br>
+        <!--<label for="username">Username: </label>
+        <input type="text" id="username" name="username"><br>-->
+        <label for="vol">numero quadrati (1 = 1x1, 2 = 2x2, ...):</label>
+        <input type="range" id="nSq" min="1" max="5"><br>
+        <label for="vol">Difficoltá domande (1=easy, 2=medium, 3=difficult, 4=any):</label>
+        <input type="range" id="diff" min="1" max="4">
+        <br><br>
+        <input type="submit"
+            onclick="APIrequest(); genQuestions(nSq); printButtons(document.getElementById('nSq').value);">
+    </form>
+
+
+    <script>
+        var APIjson;
+        var questionArray;
+        var richiesta = new XMLHttpRequest();
+        function APIrequest() {
+            var numSquares = eval((document.getElementById('nSq').value * document.getElementById('nSq').value) + 3);
+            var difficultyI = document.getElementById('diff').value;
+            var difficultyS = "";
+            if (difficultyI == 1) {
+                difficultyS += "&difficulty=easy";
+            }
+            else if (difficultyI == 2) {
+                difficultyS += "&difficulty=medium";
+            }
+            else if (difficultyI == 3) {
+                difficultyS += "&difficulty=hard";
+            }
+            var URL = "https://opentdb.com/api.php?type=multiple&amount=" + numSquares.toString() + difficultyS; //Url del json
+            console.log(URL);
+            richiesta.onreadystatechange = function () { //Esegui questa funzione quando ti risponde
+                if (this.readyState == 4 && this.status == 200) { //Codici di buon fine
+                    elaboraJSON(JSON.parse(richiesta.responseText)); //Siccome la richiesta è asincrona bisogna fare così
+                }
+            };
+            richiesta.open("GET", URL, true); //Imposta gli attributi della richiesta
+            richiesta.send(); //Manda la richiesta
+        }
+
+        function elaboraJSON(FileJson) {
+            //Fai cose
+            console.log(FileJson);
+            APIjson = FileJson;
+            console.log(APIjson);
+        }
+
+        function printQuestion(cont) {
+            var domandaJSON = JSON.stringify(APIjson.results[cont].question);
+            console.log(cont);
+            console.log("console log del json globale nella funzione della stampa domanda");
+            console.log(APIjson);
+            console.log(APIjson.results[cont].question);
+            document.getElementById("question").innerHTML = domandaJSON;//APIjson.results[cont].question;
+        }
+
+        function vedi(chi) {
+            alert(chi);
+            document.getElementById(chi).style.backgroundColor = "red";
+        }
+
+        function shuffle(array) {
+            var currentIndex = array.length, temporaryValue, randomIndex;
+
+            // While there remain elements to shuffle...
+            while (0 !== currentIndex) {
+
+                // Pick a remaining element...
+                randomIndex = Math.floor(Math.random() * currentIndex);
+                currentIndex -= 1;
+
+                // And swap it with the current element.
+                temporaryValue = array[currentIndex];
+                array[currentIndex] = array[randomIndex];
+                array[randomIndex] = temporaryValue;
+            }
+
+            return array;
+        }
+
+        function genQuestions(nSq) {
+            var risposte = [];
+            var risposteShuffle = [];
+            for (var i = 0; i < nSq * nSq + 3; i++) {
+                for (var j = 0; j < 3; j++) {
+                    risposte.push(APIjson.results[i].incorrect_answers[j]);
+                }
+                risposte.push(APIjson.results[i].correct_answer);
+                console.log(risposte);
+                risposteShuffle = shuffle(risposte);
+                questionArray += "{d1:" + risposteShuffle[0] + ", d2:" + risposteShuffle[1] + ", d3:" + risposteShuffle[2] + ", d4:" + risposteShuffle[3] + "}";
+                console.log(risposteShuffle);
+            }
+        }
+
+        function printReply(cont) {
+            document.getElementById("risposte").style.display = "block";
+            console.log(questionArray);
+            document.getElementById("risp1").innerHTML = questionArray[0];
+            document.getElementById("risp2").innerHTML = questionArray[1];
+            document.getElementById("risp3").innerHTML = questionArray[2];
+            document.getElementById("risp4").innerHTML = questionArray[3];
+
+        }
+
+        function printButtons(val1) {
+            var cont = 0;
+            for (r = 0; r < val1; r++) {
+                document.write("<br />");
+                for (c = 0; c < val1; c++) {
+                    cont++;
+                    riga = "<button id='" + cont + "' onclick=printQuestion('" + cont + "');printReply('" + cont + "');>" + "domanda " + cont + "</button>";
+                    document.write(riga);
+                }
+            }
+            var domanda = "<div id='risp_sect'><p id='question'></p><div id='risposte' style='display: none'><form><input type='radio' id='1r' name='risp' value='1'/><label id='risp1' for='1r'></label><br><input type='radio' id='2r' name='risp' value='2'/><label id='risp2' for='2r'></label><br><input type='radio' id='3r' name='risp' value='3'/><label id='risp3' for='3r'></label><br><input type='radio' id='4r' name='risp' value='4'/><label id='risp4' for='4r'></label><br><br><input type='button' value='Respond' onclick='checkRespond()'></form></div></div>" //  <input type='radio' id='test' name='risp' value='1'/> <br>
+            document.write(domanda);
+        }
+
+        function checkRespond() {
+            if (document.getElementById('1').checked == true) {
+                console.log("premuto il tasto 1");
+            }
+            else if (document.getElementById('2').checked == true) {
+                console.log("premuto il tasto 2");
+            }
+            else if (document.getElementById('3').checked == true) {
+                console.log("premuto il tasto 3");
+            }
+            else if (document.getElementById('4').checked == true) {
+                console.log("premuto il tasto 4");
+            }
+        }
+    </script>
+</body>
+
+</html>
