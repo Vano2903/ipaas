@@ -2,18 +2,27 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"math/rand"
+	"strings"
+	"time"
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
 	"github.com/docker/go-connections/nat"
+
+	_ "github.com/go-sql-driver/mysql"
 )
 
 var (
-	MYSQL_IMAGE = "mysql"
-	MYSQL_PORT  = "3306"
+	lowerCharSet = "abcdedfghijklmnopqrst"
+	upperCharSet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+	numberSet    = "0123456789"
+	allCharSet   = lowerCharSet + upperCharSet + numberSet
+	MYSQL_IMAGE  = "mysql"
+	MYSQL_PORT   = "3306"
 )
 
 func CreateNewDB(image, port string, env []string) (string, error) {
@@ -87,21 +96,85 @@ func CreateNewDB(image, port string, env []string) (string, error) {
 }
 
 //function to generate a random alphanumerical password without spaces
-func GenerateRandomPassword() string {
-	var password string
-	for i := 0; i < 16; i++ {
-		password += string(rand.Intn(26) + 65)
+func generatePassword() string {
+	minNum := 4
+	minUpperCase := 4
+	passwordLength := 16
+
+	rand.Seed(time.Now().Unix())
+	var password strings.Builder
+
+	//Set numeric
+	for i := 0; i < minNum; i++ {
+		random := rand.Intn(len(numberSet))
+		password.WriteString(string(numberSet[random]))
 	}
-	return password
+
+	//Set uppercase
+	for i := 0; i < minUpperCase; i++ {
+		random := rand.Intn(len(upperCharSet))
+		password.WriteString(string(upperCharSet[random]))
+	}
+
+	remainingLength := passwordLength - minNum - minUpperCase
+	for i := 0; i < remainingLength; i++ {
+		random := rand.Intn(len(allCharSet))
+		password.WriteString(string(allCharSet[random]))
+	}
+	inRune := []rune(password.String())
+	rand.Shuffle(len(inRune), func(i, j int) {
+		inRune[i], inRune[j] = inRune[j], inRune[i]
+	})
+	return string(inRune)
 }
 
 func main() {
-	fmt.Println("password:", GenerateRandomPassword())
 
-	// env := []string{
-	// 	"MYSQL_ROOT_PASSWORD=root",
-	// 	"MYSQL_DATABASE=test",
-	// }
+	password := generatePassword()
+	fmt.Println("password:", password)
 
-	// fmt.Println(CreateNewDB(MYSQL_IMAGE, MYSQL_PORT, env))
+	env := []string{
+		"MYSQL_ROOT_PASSWORD=" + password,
+		"MYSQL_USER=test",
+		"MYSQL_PASSWORD=test",
+		"MYSQL_DATABASE=test",
+	}
+
+	fmt.Println("creating new db")
+	id, _ := CreateNewDB(MYSQL_IMAGE, MYSQL_PORT, env)
+	fmt.Println(id)
+
+	//get the port that the container is listening to
+	cli, err := client.NewClientWithOpts(client.FromEnv)
+	if err != nil {
+		panic(err)
+	}
+	container, err := cli.ContainerInspect(context.Background(), "c61f796566ce")
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Println("getting port")
+	port := container.NetworkSettings.NetworkSettingsBase.Ports["3306/tcp"][0].HostPort
+
+	username := "test"
+	pass := "test"
+	dbName := "test"
+	fmt.Println("username", username)
+	fmt.Println("password", pass)
+	fmt.Println("database", dbName)
+	fmt.Println("port", port)
+
+	//connect to mysql
+	fmt.Println("connecting to mysql")
+	db, err := sql.Open("mysql", fmt.Sprintf("%s:%s@tcp(localhost:%s)/%s", username, pass, port, dbName))
+	if err != nil {
+		panic(err.Error())
+	}
+	defer db.Close()
+	if err := db.Ping(); err != nil {
+		panic(err.Error())
+	}
+
+	fmt.Println("YOOOO FUNZIONA TUTTOOOOOOOOOOOOOO")
 }
