@@ -175,6 +175,4 @@ func main() {
 	if err := db.Ping(); err != nil {
 		panic(err.Error())
 	}
-
-	fmt.Println("YOOOO FUNZIONA TUTTOOOOOOOOOOOOOO")
 }
