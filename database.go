@@ -239,4 +239,5 @@ func main() {
 	// fmt.Println("database", dbName)
 	// fmt.Println("port", port)
 	// fmt.Println("uri", fmt.Sprintf("%s:%s@tcp(localhost:%s)/%s", username, pass, port, dbName))
+	fmt.Println("aaa")
 }
