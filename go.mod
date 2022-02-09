@@ -5,7 +5,6 @@ go 1.17
 require (
 	github.com/docker/docker v20.10.12+incompatible
 	github.com/docker/go-connections v0.4.0
-	github.com/go-sql-driver/mysql v1.6.0
 	github.com/joho/godotenv v1.4.0
 )
 

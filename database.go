@@ -2,40 +2,58 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
+	"log"
 	"math/rand"
 	"strings"
 	"time"
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/filters"
+	volumeType "github.com/docker/docker/api/types/volume"
 	"github.com/docker/docker/client"
 	"github.com/docker/go-connections/nat"
+)
 
-	_ "github.com/go-sql-driver/mysql"
+const (
+	//constants for mysql
+	MYSQL_IMAGE = "mysql"
+	MYSQL_PORT  = "3306"
 )
 
 var (
+	//password elements
 	lowerCharSet = "abcdedfghijklmnopqrst"
 	upperCharSet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 	numberSet    = "0123456789"
 	allCharSet   = lowerCharSet + upperCharSet + numberSet
-	MYSQL_IMAGE  = "mysql"
-	MYSQL_PORT   = "3306"
+	c            *Controller
 )
 
-func CreateNewDB(image, port string, env []string) (string, error) {
-	//set the context and client
-	ctx := context.Background()
-	cli, err := client.NewClientWithOpts(client.FromEnv)
+type Controller struct {
+	ctx context.Context
+	cli *client.Client
+}
+
+func NewController() (*Controller, error) {
+	var err error
+
+	c := new(Controller)
+	c.ctx = context.Background()
+
+	c.cli, err = client.NewClientWithOpts(client.FromEnv)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
+	return c, nil
+}
+
+func (c Controller) CreateNewDB(image, port string, env []string) (string, error) {
 	//pull the image, it wont pull it if it is already there
 	//it will update itself since if there is no tag by default it means latest
-	out, err := cli.ImagePull(ctx, image, types.ImagePullOptions{})
+	out, err := c.cli.ImagePull(c.ctx, image, types.ImagePullOptions{})
 	if err != nil {
 		return "", err
 	}
@@ -82,17 +100,75 @@ func CreateNewDB(image, port string, env []string) (string, error) {
 
 	//create the container
 	//!set a name to identify the container (<student-name>.<registration_number>-<db-name>)
-	resp, err := cli.ContainerCreate(ctx, config, hostConfig, nil, nil, "")
+	resp, err := c.cli.ContainerCreate(c.ctx, config, hostConfig, nil, nil, "")
 	if err != nil {
 		return "", err
 	}
 
 	//start the container
-	if err := cli.ContainerStart(ctx, resp.ID, types.ContainerStartOptions{}); err != nil {
+	if err := c.cli.ContainerStart(c.ctx, resp.ID, types.ContainerStartOptions{}); err != nil {
 		return "", err
 	}
 
 	return resp.ID, nil
+}
+
+func (c Controller) GetContainerExternalPort(id, containerPort string) (string, error) {
+	container, err := c.cli.ContainerInspect(c.ctx, id)
+	if err != nil {
+		return "", err
+	}
+	return container.NetworkSettings.Ports[nat.Port(fmt.Sprintf("%s/tcp", containerPort))][0].HostPort, nil
+}
+
+func (c *Controller) FindVolume(name string) (volume *types.Volume, err error) {
+	volumes, err := c.cli.VolumeList(context.Background(), filters.NewArgs())
+	if err != nil {
+		return nil, err
+	}
+
+	for _, v := range volumes.Volumes {
+		if v.Name == name {
+			return v, nil
+		}
+	}
+	return nil, nil
+}
+
+func (c *Controller) EnsureVolume(name string) (created bool, volume *types.Volume, err error) {
+	volume, err = c.FindVolume(name)
+	if err != nil {
+		return false, nil, err
+	}
+
+	if volume != nil {
+		return false, volume, nil
+	}
+
+	vol, err := c.cli.VolumeCreate(c.ctx, volumeType.VolumeCreateBody{
+		Driver: "local",
+		Labels: map[string]string{"matricola": "18008", "type": "db", "dbType": "mysql"},
+		Name:   name,
+	})
+	return true, &vol, err
+}
+
+func (c *Controller) RemoveVolume(name string) (removed bool, err error) {
+	vol, err := c.FindVolume(name)
+	if err != nil {
+		return false, err
+	}
+
+	if vol == nil {
+		return false, nil
+	}
+
+	err = c.cli.VolumeRemove(context.Background(), name, true)
+	if err != nil {
+		return false, err
+	}
+
+	return true, nil
 }
 
 //function to generate a random alphanumerical password without spaces
@@ -128,51 +204,39 @@ func generatePassword() string {
 	return string(inRune)
 }
 
+func init() {
+	var err error
+	c, err = NewController()
+	if err != nil {
+		log.Fatal(err)
+	}
+}
+
 func main() {
+	// password := generatePassword()
+	// fmt.Println("password:", password)
 
-	password := generatePassword()
-	fmt.Println("password:", password)
+	// env := []string{
+	// 	"MYSQL_ROOT_PASSWORD=" + password,
+	// 	"MYSQL_USER=test",
+	// 	"MYSQL_PASSWORD=test",
+	// 	"MYSQL_DATABASE=test",
+	// }
 
-	env := []string{
-		"MYSQL_ROOT_PASSWORD=" + password,
-		"MYSQL_USER=test",
-		"MYSQL_PASSWORD=test",
-		"MYSQL_DATABASE=test",
-	}
+	// fmt.Println(c.EnsureVolume("18008-mysql"))
+	fmt.Println(c.FindVolume("18008-mysql"))
 
-	fmt.Println("creating new db")
-	id, _ := CreateNewDB(MYSQL_IMAGE, MYSQL_PORT, env)
-	fmt.Println(id)
+	// fmt.Println("creating new db")
+	// id, err := c.CreateNewDB(MYSQL_IMAGE, MYSQL_PORT, env)
+	// fmt.Println(id, err)
 
-	//get the port that the container is listening to
-	cli, err := client.NewClientWithOpts(client.FromEnv)
-	if err != nil {
-		panic(err)
-	}
-	container, err := cli.ContainerInspect(context.Background(), "c61f796566ce")
-	if err != nil {
-		panic(err)
-	}
-
-	fmt.Println("getting port")
-	port := container.NetworkSettings.NetworkSettingsBase.Ports["3306/tcp"][0].HostPort
-
-	username := "test"
-	pass := "test"
-	dbName := "test"
-	fmt.Println("username", username)
-	fmt.Println("password", pass)
-	fmt.Println("database", dbName)
-	fmt.Println("port", port)
-
-	//connect to mysql
-	fmt.Println("connecting to mysql")
-	db, err := sql.Open("mysql", fmt.Sprintf("%s:%s@tcp(localhost:%s)/%s", username, pass, port, dbName))
-	if err != nil {
-		panic(err.Error())
-	}
-	defer db.Close()
-	if err := db.Ping(); err != nil {
-		panic(err.Error())
-	}
+	// username := "test"
+	// pass := "test"
+	// dbName := "test"
+	// port, _ := c.GetContainerExternalPort(id, MYSQL_PORT)
+	// fmt.Println("username", username)
+	// fmt.Println("password", pass)
+	// fmt.Println("database", dbName)
+	// fmt.Println("port", port)
+	// fmt.Println("uri", fmt.Sprintf("%s:%s@tcp(localhost:%s)/%s", username, pass, port, dbName))
 }
