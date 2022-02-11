@@ -226,29 +226,29 @@ func init() {
 	currentPath = os.Getenv("basePath")
 }
 
-func main() {
-	password := generatePassword()
-	fmt.Println("password:", password)
+// func main() {
+// 	password := generatePassword()
+// 	fmt.Println("password:", password)
 
-	env := []string{
-		"MYSQL_ROOT_PASSWORD=" + password,
-		"MYSQL_USER=test",
-		"MYSQL_PASSWORD=test",
-		"MYSQL_DATABASE=test",
-	}
+// 	env := []string{
+// 		"MYSQL_ROOT_PASSWORD=" + password,
+// 		"MYSQL_USER=test",
+// 		"MYSQL_PASSWORD=test",
+// 		"MYSQL_DATABASE=test",
+// 	}
 
-	fmt.Println("creating new db")
-	DbType := "mysql"
-	id, err := c.CreateNewDB(DbType, MYSQL_IMAGE, MYSQL_PORT, env, fmt.Sprintf("%s/%s", currentPath, "testvolume")) //currentPath+"/testvolume"
-	fmt.Println(id, err)
+// 	fmt.Println("creating new db")
+// 	DbType := "mysql"
+// 	id, err := c.CreateNewDB(DbType, MYSQL_IMAGE, MYSQL_PORT, env, fmt.Sprintf("%s/%s", currentPath, "testvolume")) //currentPath+"/testvolume"
+// 	fmt.Println(id, err)
 
-	username := "test"
-	pass := "test"
-	dbName := "test"
-	port, _ := c.GetContainerExternalPort(id, MYSQL_PORT)
-	fmt.Println("username", username)
-	fmt.Println("password", pass)
-	fmt.Println("database", dbName)
-	fmt.Println("port", port)
-	fmt.Println("uri", fmt.Sprintf("%s:%s@tcp(localhost:%s)/%s", username, pass, port, dbName))
-}
+// 	username := "test"
+// 	pass := "test"
+// 	dbName := "test"
+// 	port, _ := c.GetContainerExternalPort(id, MYSQL_PORT)
+// 	fmt.Println("username", username)
+// 	fmt.Println("password", pass)
+// 	fmt.Println("database", dbName)
+// 	fmt.Println("port", port)
+// 	fmt.Println("uri", fmt.Sprintf("%s:%s@tcp(localhost:%s)/%s", username, pass, port, dbName))
+// }
