@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
+	"os"
 	"strings"
 	"time"
 
@@ -29,6 +30,7 @@ var (
 	numberSet    = "0123456789"
 	allCharSet   = lowerCharSet + upperCharSet + numberSet
 	c            *Controller
+	currentPath  string
 )
 
 type Controller struct {
@@ -50,7 +52,7 @@ func NewController() (*Controller, error) {
 	return c, nil
 }
 
-func (c Controller) CreateNewDB(image, port string, env []string) (string, error) {
+func (c Controller) CreateNewDB(DbType, image, port string, env []string, volumePath string) (string, error) {
 	//pull the image, it wont pull it if it is already there
 	//it will update itself since if there is no tag by default it means latest
 	out, err := c.cli.ImagePull(c.ctx, image, types.ImagePullOptions{})
@@ -95,6 +97,16 @@ func (c Controller) CreateNewDB(image, port string, env []string) (string, error
 		RestartPolicy: container.RestartPolicy{
 			Name:              "on-failure",
 			MaximumRetryCount: 5,
+		},
+		// Mounts: []mount.Mount{
+		// 	{
+		// 		Type:   "volume",
+		// 		Source: volumePath,
+		// 		Target: "/var/lib/mysql",
+		// 	},
+		// },
+		Binds: []string{
+			fmt.Sprintf("%s:/var/lib/mysql", volumePath),
 		},
 	}
 
@@ -210,36 +222,33 @@ func init() {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	currentPath = os.Getenv("basePath")
 }
 
 func main() {
-	// password := generatePassword()
-	// fmt.Println("password:", password)
+	password := generatePassword()
+	fmt.Println("password:", password)
 
-	// env := []string{
-	// 	"MYSQL_ROOT_PASSWORD=" + password,
-	// 	"MYSQL_USER=test",
-	// 	"MYSQL_PASSWORD=test",
-	// 	"MYSQL_DATABASE=test",
-	// }
+	env := []string{
+		"MYSQL_ROOT_PASSWORD=" + password,
+		"MYSQL_USER=test",
+		"MYSQL_PASSWORD=test",
+		"MYSQL_DATABASE=test",
+	}
 
-	// fmt.Println(c.EnsureVolume("18008-mysql"))
-	fmt.Println(c.FindVolume("18008-mysql"))
+	fmt.Println("creating new db")
+	DbType := "mysql"
+	id, err := c.CreateNewDB(DbType, MYSQL_IMAGE, MYSQL_PORT, env, fmt.Sprintf("%s/%s", currentPath, "testvolume")) //currentPath+"/testvolume"
+	fmt.Println(id, err)
 
-	// fmt.Println("creating new db")
-	// id, err := c.CreateNewDB(MYSQL_IMAGE, MYSQL_PORT, env)
-	// fmt.Println(id, err)
-
-	// username := "test"
-	// pass := "test"
-	// dbName := "test"
-	// port, _ := c.GetContainerExternalPort(id, MYSQL_PORT)
-	// fmt.Println("username", username)
-	// fmt.Println("password", pass)
-	// fmt.Println("database", dbName)
-	// fmt.Println("port", port)
-	// fmt.Println("uri", fmt.Sprintf("%s:%s@tcp(localhost:%s)/%s", username, pass, port, dbName))
-	fmt.Println("aaa")
+	username := "test"
+	pass := "test"
+	dbName := "test"
+	port, _ := c.GetContainerExternalPort(id, MYSQL_PORT)
+	fmt.Println("username", username)
+	fmt.Println("password", pass)
+	fmt.Println("database", dbName)
+	fmt.Println("port", port)
+	fmt.Println("uri", fmt.Sprintf("%s:%s@tcp(localhost:%s)/%s", username, pass, port, dbName))
 }
-
-//testing
