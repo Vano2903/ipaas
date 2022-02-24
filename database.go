@@ -171,7 +171,7 @@ func (c *Controller) RemoveVolume(name string) (removed bool, err error) {
 	return true, nil
 }
 
-//function to generate a random alphanumerical password without spaces
+//function to generate a random alphanumerical password without spaces (24 characters)
 func generatePassword() string {
 	minNum := 4
 	minUpperCase := 4
@@ -212,34 +212,34 @@ func init() {
 	}
 }
 
-func main() {
-	// password := generatePassword()
-	// fmt.Println("password:", password)
+// func main() {
+// password := generatePassword()
+// fmt.Println("password:", password)
 
-	// env := []string{
-	// 	"MYSQL_ROOT_PASSWORD=" + password,
-	// 	"MYSQL_USER=test",
-	// 	"MYSQL_PASSWORD=test",
-	// 	"MYSQL_DATABASE=test",
-	// }
+// env := []string{
+// 	"MYSQL_ROOT_PASSWORD=" + password,
+// 	"MYSQL_USER=test",
+// 	"MYSQL_PASSWORD=test",
+// 	"MYSQL_DATABASE=test",
+// }
 
-	// fmt.Println(c.EnsureVolume("18008-mysql"))
-	fmt.Println(c.FindVolume("18008-mysql"))
+// fmt.Println(c.EnsureVolume("18008-mysql"))
+// fmt.Println(c.FindVolume("18008-mysql"))
 
-	// fmt.Println("creating new db")
-	// id, err := c.CreateNewDB(MYSQL_IMAGE, MYSQL_PORT, env)
-	// fmt.Println(id, err)
+// fmt.Println("creating new db")
+// id, err := c.CreateNewDB(MYSQL_IMAGE, MYSQL_PORT, env)
+// fmt.Println(id, err)
 
-	// username := "test"
-	// pass := "test"
-	// dbName := "test"
-	// port, _ := c.GetContainerExternalPort(id, MYSQL_PORT)
-	// fmt.Println("username", username)
-	// fmt.Println("password", pass)
-	// fmt.Println("database", dbName)
-	// fmt.Println("port", port)
-	// fmt.Println("uri", fmt.Sprintf("%s:%s@tcp(localhost:%s)/%s", username, pass, port, dbName))
-	fmt.Println("aaa")
-}
+// username := "test"
+// pass := "test"
+// dbName := "test"
+// port, _ := c.GetContainerExternalPort(id, MYSQL_PORT)
+// fmt.Println("username", username)
+// fmt.Println("password", pass)
+// fmt.Println("database", dbName)
+// fmt.Println("port", port)
+// fmt.Println("uri", fmt.Sprintf("%s:%s@tcp(localhost:%s)/%s", username, pass, port, dbName))
+// fmt.Println("aaa")
+// }
 
 //testing

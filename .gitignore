@@ -1,1 +1,2 @@
-.env.yaml
+.env
+ipaas-db-dump/
