@@ -22,12 +22,12 @@ services:
         MYSQL_ROOT_PASSWORD: root
       ports:
         - "3306:3306"
-      command: ['mysqld', '--character-set-server=utf8mb4', '--collation-server=utf8mb4_unicode_ci']
-      # expose:
-      #   - 3306
       volumes:
+        - ./db/tables.sql:/docker-entrypoint-initdb.d/tables.sql
         - ./ipaas-db-dump:/var/lib/mysql
-        - ./db/:/docker-entrypoint-initdb.d/
+      command: ['mysqld', '--character-set-server=utf8mb4', '--collation-server=utf8mb4_unicode_ci']
+      # exec:
+      #     - mysql -uroot -proot -e"source /docker-entrypoint-initdb.d/tables.sql"
       networks:
         - "ipaas"
 volumes:

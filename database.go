@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
-	"os"
 	"strings"
 	"time"
 
@@ -223,6 +222,7 @@ func init() {
 		log.Fatal(err)
 	}
 }
+
 // func main() {
 // password := generatePassword()
 // fmt.Println("password:", password)
