@@ -4,9 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"math/rand"
-	"strings"
-	"time"
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
@@ -23,13 +20,8 @@ const (
 )
 
 var (
-	//password elements
-	lowerCharSet = "abcdedfghijklmnopqrst"
-	upperCharSet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-	numberSet    = "0123456789"
-	allCharSet   = lowerCharSet + upperCharSet + numberSet
-	c            *Controller
-	currentPath  string
+	c           *Controller
+	currentPath string
 )
 
 type Controller struct {
@@ -180,39 +172,6 @@ func (c *Controller) RemoveVolume(name string) (removed bool, err error) {
 	}
 
 	return true, nil
-}
-
-//function to generate a random alphanumerical password without spaces (24 characters)
-func generatePassword() string {
-	minNum := 4
-	minUpperCase := 4
-	passwordLength := 16
-
-	rand.Seed(time.Now().Unix())
-	var password strings.Builder
-
-	//Set numeric
-	for i := 0; i < minNum; i++ {
-		random := rand.Intn(len(numberSet))
-		password.WriteString(string(numberSet[random]))
-	}
-
-	//Set uppercase
-	for i := 0; i < minUpperCase; i++ {
-		random := rand.Intn(len(upperCharSet))
-		password.WriteString(string(upperCharSet[random]))
-	}
-
-	remainingLength := passwordLength - minNum - minUpperCase
-	for i := 0; i < remainingLength; i++ {
-		random := rand.Intn(len(allCharSet))
-		password.WriteString(string(allCharSet[random]))
-	}
-	inRune := []rune(password.String())
-	rand.Shuffle(len(inRune), func(i, j int) {
-		inRune[i], inRune[j] = inRune[j], inRune[i]
-	})
-	return string(inRune)
 }
 
 func init() {
