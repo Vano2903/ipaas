@@ -20,6 +20,7 @@ var (
 	allCharSet   = lowerCharSet + upperCharSet + numberSet
 )
 
+//returns a pointer to a db connection
 func connectToDB() (db *sql.DB, err error) {
 	return sql.Open("mysql", "root:root@tcp(localhost:3306)/ipaas?parseTime=true&charset=utf8mb4")
 }
@@ -30,10 +31,16 @@ func returnError(w http.ResponseWriter, code int, message string) {
 	fmt.Fprintf(w, `{"code": %d, "msg":"%s", "error": true}`, code, message)
 }
 
-func returnErrorJson(w http.ResponseWriter, code int, message, values map[string]interface{}) {
+func returnErrorMap(w http.ResponseWriter, code int, message string, values map[string]interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
 	json, _ := json.Marshal(values)
+	fmt.Fprintf(w, `{"code": %d, "msg":"%s", "error": true, "data":%s}`, code, message, json)
+}
+
+func returnErrorJson(w http.ResponseWriter, code int, message string, json []byte) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(code)
 	fmt.Fprintf(w, `{"code": %d, "msg":"%s", "error": true, "data":%s}`, code, message, json)
 }
 
@@ -43,20 +50,26 @@ func returnSuccess(w http.ResponseWriter, code int, message string) {
 	fmt.Fprintf(w, `{"code": %d, "msg":"%s", "error": false}`, code, message)
 }
 
-func returnSuccessJson(w http.ResponseWriter, code int, message string, values map[string]interface{}) {
+func returnSuccessMap(w http.ResponseWriter, code int, message string, values map[string]interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
 	json, _ := json.Marshal(values)
 	fmt.Fprintf(w, `{"code": %d, "msg":"%s", "error": false, "data":%s}`, code, message, json)
 }
 
-//function to generate a random alphanumerical password without spaces (24 characters)
-func generatePassword() string {
+func returnSuccessJson(w http.ResponseWriter, code int, message string, json []byte) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(code)
+	fmt.Fprintf(w, `{"code": %d, "msg":"%s", "error": false, "data":%s}`, code, message, json)
+}
+
+//function to generate a random alphanumerical string without spaces and with a given length
+func generateRandomString(size int) string {
 	minNum := 4
 	minUpperCase := 4
-	passwordLength := 16
+	passwordLength := size
 
-	rand.Seed(time.Now().Unix())
+	rand.Seed(time.Now().UnixNano())
 	var password strings.Builder
 
 	//Set numeric
@@ -82,18 +95,3 @@ func generatePassword() string {
 	})
 	return string(inRune)
 }
-
-// func checkJWT(w http.ResponseWriter, r *http.Request) (CustomClaims, error) {
-// 	jwt, err := r.Cookie("JWT")
-// 	if err != nil {
-// 		returnError(w, http.StatusUnauthorized, "No JWT cookie found")
-// 		return CustomClaims{}, err
-// 	}
-
-// 	jwtContent, err := ParseToken(jwt.Value)
-// 	if err != nil {
-// 		returnError(w, http.StatusUnauthorized, "Invalid JWT")
-// 		return CustomClaims{}, err
-// 	}
-// 	return jwtContent, nil
-// }
