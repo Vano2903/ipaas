@@ -47,7 +47,7 @@ func NewController() (*Controller, error) {
 
 //create a new database container given the db type, image, port, enviroment variables and volume
 //it returns the container id and an error
-func (c Controller) CreateNewDB(DbType, image, port string, env []string, volumePath string) (string, error) {
+func (c Controller) CreateNewDB(DbType, image, port string, env []string) (string, error) {
 	//pull the image, it wont pull it if it is already there
 	//it will update itself since if there is no tag by default it means latest
 	out, err := c.cli.ImagePull(c.ctx, image, types.ImagePullOptions{})
@@ -99,10 +99,11 @@ func (c Controller) CreateNewDB(DbType, image, port string, env []string, volume
 		// 		Target: "/var/lib/mysql",
 		// 	},
 		// },
+
 		//!should change, this is only for mysql
-		Binds: []string{
-			fmt.Sprintf("%s:/var/lib/mysql", volumePath),
-		},
+		// Binds: []string{
+		// 	fmt.Sprintf("%s:/var/lib/mysql", volumePath),
+		// },
 	}
 
 	//create the container
