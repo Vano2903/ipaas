@@ -11,7 +11,7 @@ import (
 	"github.com/gorilla/mux"
 )
 
-//struct used to get the user from paleoid
+// struct used to get the user from paleoid
 type Payload struct {
 	GrantType    string `json:"grant_type"`    //will always be "authorization_code"
 	Code         string `json:"code"`          //the code returned by the oauth server
@@ -40,7 +40,8 @@ save them in the session
 func AccessTokenMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		log.Println("middleware")
-		//get the access token and the refresh token from cookies
+		// get the access token and the refresh token from cookies
+
 		var accessToken string
 		var refreshToken string
 		for _, cookie := range r.Cookies() {
@@ -51,6 +52,7 @@ func AccessTokenMiddleware(next http.Handler) http.Handler {
 				refreshToken = cookie.Value
 			}
 		}
+
 		log.Println("access token found:", accessToken)
 		log.Println("refresh token found:", refreshToken)
 
@@ -87,15 +89,32 @@ func AccessTokenMiddleware(next http.Handler) http.Handler {
 			log.Println("generated new token pair")
 			log.Println("access token:", accessToken)
 			log.Println("refresh token:", newRefreshToken)
-			//set the tokens as cookie
+
+			//delete the old tokens from the cookies
+			http.SetCookie(w, &http.Cookie{
+				Name:    "accessToken",
+				Path:    "/",
+				Value:   "",
+				Expires: time.Unix(0, 0),
+			})
+			http.SetCookie(w, &http.Cookie{
+				Name:    "refreshToken",
+				Path:    "/",
+				Value:   "",
+				Expires: time.Unix(0, 0),
+			})
+
+			//set the new tokens as cookie
 			//!should set domain and path
 			http.SetCookie(w, &http.Cookie{
 				Name:    "accessToken",
+				Path:    "/",
 				Value:   accessToken,
 				Expires: time.Now().Add(time.Hour),
 			})
 			http.SetCookie(w, &http.Cookie{
 				Name:    "refreshToken",
+				Path:    "/",
 				Value:   newRefreshToken,
 				Expires: time.Now().Add(time.Hour * 24 * 7),
 			})
