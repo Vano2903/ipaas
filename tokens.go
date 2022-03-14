@@ -15,7 +15,7 @@ type TokenPair struct {
 
 //check if a token is already in the database (either access or refresh token)
 func tokenExists(token string, connection *sql.DB) (bool, error) {
-	query := "SELECT * FROM tokens WHERE accToken = ? OR refreshToken = ?"
+	query := "SELECT * FROM tokens t JOIN accessTokens a ON a.ID = t.accID JOIN refreshTokens r ON r.ID = t.refID WHERE a.accToken = ? OR r.refreshToken = ?"
 
 	var found bool
 	err := connection.QueryRow(query, token, token).Scan(&found)
@@ -68,8 +68,24 @@ func GenerateTokenPair(userID int, connection *sql.DB) (string, string, error) {
 	}
 
 	//insert the token pair into the database
-	query := "INSERT INTO tokens (userID, accToken, accExp, refreshToken, refreshExp) VALUES (?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE accToken = ?, accExp = ?, refreshToken = ?, refreshExp = ?"
-	_, err := connection.Exec(query, userID, pair.AccessToken, pair.ExpirationAccessToken, pair.RefreshToken, pair.ExpirationRefreshToken, pair.AccessToken, pair.ExpirationAccessToken, pair.RefreshToken, pair.ExpirationRefreshToken)
+	accessTokenQuery := "INSERT INTO accessTokens (accToken, accExp) VALUES (?, ?)"
+	refreshTokenQuery := "INSERT INTO refreshTokens (refreshToken, refreshExp) VALUES (?, ?)"
+
+	accessResult, err := connection.Exec(accessTokenQuery, pair.AccessToken, pair.ExpirationAccessToken)
+	if err != nil {
+		return "", "", err
+	}
+
+	refreshResult, err := connection.Exec(refreshTokenQuery, pair.RefreshToken, pair.ExpirationRefreshToken)
+	if err != nil {
+		return "", "", err
+	}
+
+	accessID, _ := accessResult.LastInsertId()
+	refreshID, _ := refreshResult.LastInsertId()
+
+	relationShipQuery := "INSERT INTO tokens (userID, accID, refID) VALUES (?, ?, ?)"
+	_, err = connection.Exec(relationShipQuery, userID, accessID, refreshID)
 
 	return pair.AccessToken, pair.RefreshToken, err
 }
@@ -78,9 +94,9 @@ func GenerateTokenPair(userID int, connection *sql.DB) (string, string, error) {
 func IsTokenExpired(isAccessToken bool, token string, connection *sql.DB) bool {
 	var query string
 	if isAccessToken {
-		query = "SELECT accExp FROM tokens WHERE accToken = ?"
+		query = "SELECT accExp FROM accessTokens WHERE accToken = ?"
 	} else {
-		query = "SELECT refreshExp FROM tokens WHERE refreshToken = ?"
+		query = "SELECT refreshExp FROM refreshTokens WHERE refreshToken = ?"
 	}
 
 	var exp time.Time
@@ -93,14 +109,15 @@ func IsTokenExpired(isAccessToken bool, token string, connection *sql.DB) bool {
 	return exp.Before(time.Now())
 }
 
-//che the student struct from the access token (can't use the refresh token)
+//get the student struct from the access token (can't use the refresh token)
 func GetUserFromAccessToken(accessToken string, connection *sql.DB) (Student, error) {
 	//check if the token is expired
 	if IsTokenExpired(true, accessToken, connection) {
 		return Student{}, nil
 	}
 
-	query := "SELECT u.* FROM users as u JOIN tokens t ON u.userID = t.userID WHERE t.accToken = ?"
+	// query := "SELECT u.* FROM users as u JOIN tokens t ON u.userID = t.userID WHERE t.accToken = ?"
+	query := "SELECT u.* FROM users u JOIN tokens t ON u.userID = t.userID JOIN accessTokens a ON t.accID = a.ID WHERE a.accToken = ?"
 	var user Student
 	//get the student usign a join between the tokens and the users
 	err := connection.QueryRow(query, accessToken).Scan(&user.ID, &user.Name, &user.LastName, &user.Email, &user.Pfp)
@@ -115,7 +132,8 @@ func GenerateNewTokenPairFromRefreshToken(refreshToken string, connection *sql.D
 		return "", "", nil
 	}
 	//query to get the userID from the refresh token
-	getUserFromRefreshTokenQuery := "SELECT u.userID FROM users as u JOIN tokens t ON u.userID = t.userID WHERE t.refreshToken = ?"
+	// getUserFromRefreshTokenQuery := "SELECT u.userID FROM users as u JOIN tokens t ON u.userID = t.userID WHERE t.refreshToken = ?"
+	getUserFromRefreshTokenQuery := "SELECT u.userID FROM users u JOIN tokens t ON u.userID = t.userID JOIN refreshTokens r ON t.refID = r.ID WHERE r.refreshToken = ?"
 	var userID int
 	err := connection.QueryRow(getUserFromRefreshTokenQuery, refreshToken).Scan(&userID)
 	if err != nil {
