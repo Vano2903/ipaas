@@ -9,15 +9,6 @@ CREATE TABLE IF NOT EXISTS `states` (
     PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
-CREATE TABLE IF NOT EXISTS `tokens` (
-    `userID` int not null,
-    `accToken` char(64) NOT NULL,
-    `accExp` DATETIME NOT NULL,
-    `refreshToken` char(64) NOT NULL,
-    `refreshExp` DATETIME NOT NULL,
-    PRIMARY KEY (`userID`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8;
-
 CREATE TABLE IF NOT EXISTS `users`(
     `userID` int not null,
     `name` varchar(30) NOT NULL,
@@ -26,3 +17,26 @@ CREATE TABLE IF NOT EXISTS `users`(
     `pfp` varchar(55) NOT NULL,
     PRIMARY KEY(`userID`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
+CREATE TABLE IF NOT EXISTS `tokens` (
+    `ID` int(11) unsigned NOT NULL AUTO_INCREMENT,
+    `userID` int not null,
+    `accId` int NOT NULL,
+    `refID` int NOT NULL,
+    PRIMARY KEY (`ID`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
+CREATE TABLE IF NOT EXISTS `accessTokens` (
+    `ID` int(11) unsigned NOT NULL AUTO_INCREMENT,
+    `accToken` char(64) NOT NULL,
+    `accExp` DATETIME NOT NULL,
+    PRIMARY KEY (`ID`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
+CREATE TABLE IF NOT EXISTS `refreshTokens` (
+    `ID` int(11) unsigned NOT NULL AUTO_INCREMENT,
+    `refreshToken` char(64) NOT NULL,
+    `refreshExp` DATETIME NOT NULL,
+    PRIMARY KEY (`ID`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
