@@ -133,7 +133,7 @@ func AccessTokenMiddleware(next http.Handler) http.Handler {
 //2) db type (mysql, mariadb, postgresql, mongodb)
 //3) db version (can be null which will mean the latest version)
 func NewDBHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
+	// w.Header().Set("Content-Type", "application/json")
 	//read post body
 	var dbPost dbPost
 	err := json.NewDecoder(r.Body).Decode(&dbPost)
@@ -141,20 +141,27 @@ func NewDBHandler(w http.ResponseWriter, r *http.Request) {
 		returnError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-
 	password := generateRandomString(16)
 	env := []string{
 		"MYSQL_ROOT_PASSWORD=" + password,
 		"MYSQL_DATABASE=" + dbPost.DbName,
 	}
 	id, err := c.CreateNewDB(dbPost.DbType, dbPost.DbVersion, MYSQL_PORT, env)
+	fmt.Println("database id:", id)
 	if err != nil {
 		returnError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
+	//! looks like in windows this sleep is needed (never had this problem on linux
+	//! but it might be because windows takes a bit more to give a external port to the daemon)
+	time.Sleep(time.Second * 1)
+	
 	port, err := c.GetContainerExternalPort(id, MYSQL_PORT)
-
+	if err != nil {
+		returnError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
 	json := map[string]interface{}{
 		"id":        id,
 		"important": "the password is for root user of the server",
