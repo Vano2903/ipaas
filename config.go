@@ -22,6 +22,15 @@ func init() {
 		panic("Error loading .env file")
 	}
 
+	conn, err := connectToDB()
+	if err != nil {
+		panic("error connecting to the database: " + err.Error())
+	}
+	err = conn.Ping()
+	if err != nil {
+		panic("error pinging the database: " + err.Error())
+	}
+
 	//generate private and public keys
 	privateKey, err = rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
