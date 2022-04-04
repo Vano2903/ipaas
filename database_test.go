@@ -4,9 +4,9 @@ import "testing"
 
 //should implmenet the other dbms
 func TestCreateNewDB(t *testing.T) {
-	c, _ := NewController()
+	c, _ := NewContainerController()
 
-	_, err := c.CreateNewDB("mysql", "mysql", "3306", []string{
+	_, err := c.CreateNewDB(c.dbContainersConfigs["mysql"], []string{
 		"MYSQL_ROOT_PASSWORD=ciao",
 	})
 	if err != nil {
