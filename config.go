@@ -3,16 +3,14 @@ package main
 import (
 	"crypto/rand"
 	"crypto/rsa"
-	"os"
 
-	"github.com/gorilla/sessions"
 	"github.com/joho/godotenv"
 )
 
 var (
 	privateKey *rsa.PrivateKey
 	publicKey  *rsa.PublicKey
-	store      *sessions.CookieStore
+	handler    *Handler
 )
 
 func init() {
@@ -38,6 +36,8 @@ func init() {
 	}
 	publicKey = &privateKey.PublicKey
 
-	//generate the session storage
-	store = sessions.NewCookieStore([]byte(os.Getenv("SESSION_KEY")))
+	handler, err = NewHandler()
+	if err != nil {
+		panic(err)
+	}
 }
