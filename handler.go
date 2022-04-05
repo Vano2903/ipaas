@@ -132,13 +132,6 @@ func (h Handler) TokensMiddleware(next http.Handler) http.Handler {
 //2) db type (mysql, mariadb, mongodb)
 //3) (not implemented) db version (can be null which will mean the latest version)
 func (h Handler) NewDBHandler(w http.ResponseWriter, r *http.Request) {
-	// conn, err := connectToDB()
-	// if err != nil {
-	// 	returnError(w, http.StatusInternalServerError, err.Error())
-	// 	return
-	// }
-	// w.Header().Set("Content-Type", "application/json")
-
 	//read post body
 	var dbPost dbPost
 	err := json.NewDecoder(r.Body).Decode(&dbPost)
@@ -147,6 +140,7 @@ func (h Handler) NewDBHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	//generate env variables for the container
 	password := generateRandomString(16)
 	var env []string
 	switch dbPost.DbType {
@@ -170,29 +164,34 @@ func (h Handler) NewDBHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	id, err := h.cc.CreateNewDB(h.cc.dbContainersConfigs[dbPost.DbName], env)
+	//create the database container
+	id, err := h.cc.CreateNewDB(h.cc.dbContainersConfigs[dbPost.DbType], env)
 	if err != nil {
 		resp.Errorf(w, http.StatusInternalServerError, "error creating a new database: %v", err.Error())
 		return
 	}
 
-	port, err := h.cc.GetContainerExternalPort(id, h.cc.dbContainersConfigs[dbPost.DbName].port)
+	//get the external port
+	port, err := h.cc.GetContainerExternalPort(id, h.cc.dbContainersConfigs[dbPost.DbType].port)
 	if err != nil {
 		resp.Errorf(w, http.StatusInternalServerError, "error getting the external port: %v", err.Error())
 		return
 	}
 
+	//connect to the db
 	conn, err := connectToDB()
 	if err != nil {
 		resp.Errorf(w, http.StatusInternalServerError, "error connecting to the database: %v", err.Error())
 		return
 	}
 
+	//get the student from the cookies
 	student, err := h.GetUserFromCookie(r, conn)
 	if err != nil {
 		resp.Errorf(w, http.StatusInternalServerError, "error getting the user from cookies: %v", err.Error())
 	}
 
+	//add a new database application created by the student (student id)
 	insertApplicationQuery := `
 	INSERT INTO applications (dockerid, status, creator, apptype, name, description) VALUES (?, ?, ?, ?, ?, ?)
 	`
@@ -214,7 +213,7 @@ func (h Handler) NewDBHandler(w http.ResponseWriter, r *http.Request) {
 	if dbPost.DbType == "mongodb" {
 		json["uri"] = fmt.Sprintf("mongodb://root:%s@%s:%s", password, "127.0.0.1", port)
 	}
-	resp.SuccessMap(w, http.StatusOK, "New DB created", json)
+	resp.SuccessParse(w, http.StatusOK, "New DB created", json)
 }
 
 //oauth handler, will handle the 2 steps of the oauth process
@@ -258,7 +257,7 @@ func (h Handler) OauthHandler(w http.ResponseWriter, r *http.Request) {
 			Value:   response["refreshToken"].(string),
 			Expires: time.Now().Add(time.Hour * 24 * 7),
 		})
-		resp.SuccessMap(w, http.StatusOK, "Token generated", response)
+		resp.SuccessParse(w, http.StatusOK, "Token generated", response)
 		return
 	}
 
@@ -305,7 +304,7 @@ func (h Handler) OauthHandler(w http.ResponseWriter, r *http.Request) {
 			Value:   response["refreshToken"].(string),
 			Expires: time.Now().Add(time.Hour * 24 * 7),
 		})
-		resp.SuccessMap(w, http.StatusOK, "Token generated", response)
+		resp.SuccessParse(w, http.StatusOK, "Token generated", response)
 		return
 	}
 

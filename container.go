@@ -49,7 +49,6 @@ func (c ContainerController) CreateNewDB(conf dbContainerConfig, env []string) (
 		Image: conf.image,
 		Env:   env,
 	}
-
 	//host config
 	hostBinding := nat.PortBinding{
 		HostIP: "0.0.0.0",
@@ -59,7 +58,9 @@ func (c ContainerController) CreateNewDB(conf dbContainerConfig, env []string) (
 	}
 
 	//set the port for the container (internal one)
+
 	containerPort, err := nat.NewPort("tcp", conf.port)
+	fmt.Println("container port", containerPort)
 	if err != nil {
 		return "", err
 	}

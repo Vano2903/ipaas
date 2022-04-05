@@ -16,10 +16,14 @@ func Error(w http.ResponseWriter, code int, message string) {
 	fmt.Fprintf(w, `{"code": %d, "msg":"%s", "error": true}`, code, message)
 }
 
-func ErrorMap(w http.ResponseWriter, code int, message string, values map[string]interface{}) {
+func ErrorParse(w http.ResponseWriter, code int, message string, values interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
-	json, _ := json.Marshal(values)
+	json, e := json.Marshal(values)
+	if e != nil {
+		Errorf(w, http.StatusInternalServerError, "Error marshalling json: %s", e)
+		return
+	}
 	fmt.Fprintf(w, `{"code": %d, "msg":"%s", "error": true, "data":%s}`, code, message, json)
 }
 
@@ -39,10 +43,14 @@ func Success(w http.ResponseWriter, code int, message string) {
 	fmt.Fprintf(w, `{"code": %d, "msg":"%s", "error": false}`, code, message)
 }
 
-func SuccessMap(w http.ResponseWriter, code int, message string, values map[string]interface{}) {
+func SuccessParse(w http.ResponseWriter, code int, message string, values interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
-	json, _ := json.Marshal(values)
+	json, e := json.Marshal(values)
+	if e != nil {
+		Errorf(w, http.StatusInternalServerError, "Error marshalling json: %s", e)
+		return
+	}
 	fmt.Fprintf(w, `{"code": %d, "msg":"%s", "error": false, "data":%s}`, code, message, json)
 }
 
