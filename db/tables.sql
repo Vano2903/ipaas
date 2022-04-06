@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS `applications` (
     `description` TEXT NOT NULL,
     `createdAt` datetime DEFAULT CURRENT_TIMESTAMP NOT NULL,
     `isPulic` tinyint(1) NOT NULL DEFAULT '0',
+    PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
 CREATE TABLE IF NOT EXISTS `states` (
