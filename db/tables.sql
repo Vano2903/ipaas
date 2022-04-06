@@ -2,6 +2,18 @@ CREATE DATABASE IF NOT EXISTS ipaas;
 
 USE ipaas;
 
+CREATE TABLE IF NOT EXISTS `applications` (
+    `id` int(11) NOT NULL AUTO_INCREMENT,
+    `containerID` char(64) NOT NULL,
+    `status` varchar(255) NOT NULL,
+    `studentID` int(11) NOT NULL,
+    `type` varchar(255) NOT NULL,
+    `name` varchar(255) NOT NULL,
+    `description` TEXT NOT NULL,
+    `createdAt` datetime DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    `isPulic` tinyint(1) NOT NULL DEFAULT '0',
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
 CREATE TABLE IF NOT EXISTS `states` (
     `id` int(11) unsigned NOT NULL AUTO_INCREMENT,
     `state` char(24) NOT NULL,

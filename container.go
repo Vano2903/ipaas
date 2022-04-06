@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
+	"time"
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
@@ -13,57 +13,42 @@ import (
 	"github.com/docker/go-connections/nat"
 )
 
-const (
-	//constants for mysql
-	MYSQL_IMAGE = "mysql"
-	MYSQL_PORT  = "3306"
-)
-
-var (
-	c           *Controller
-	currentPath string
-)
-
-type Controller struct {
-	ctx context.Context //context for the docker client
-	cli *client.Client  //docker client
+type dbPost struct {
+	DbName    string `json:"databaseName"`
+	DbType    string `json:"databaseType"`
+	DbVersion string `json:"databaseVersion"`
 }
 
-//create a new controller
-func NewController() (*Controller, error) {
-	var err error
+type ContainerController struct {
+	ctx                 context.Context //context for the docker client
+	cli                 *client.Client  //docker client
+	dbContainersConfigs map[string]dbContainerConfig
+}
 
-	c := new(Controller)
-	c.ctx = context.Background()
-
-	//creating docker client from env
-	c.cli, err = client.NewClientWithOpts(client.FromEnv)
-	if err != nil {
-		return nil, err
-	}
-
-	return c, nil
+type dbContainerConfig struct {
+	name  string
+	image string
+	port  string
 }
 
 //create a new database container given the db type, image, port, enviroment variables and volume
 //it returns the container id and an error
-func (c Controller) CreateNewDB(DbType, image, port string, env []string) (string, error) {
-	//pull the image, it wont pull it if it is already there
-	//it will update itself since if there is no tag by default it means latest
-	out, err := c.cli.ImagePull(c.ctx, image, types.ImagePullOptions{})
-	if err != nil {
-		return "", err
-	}
-	defer out.Close()
-	//!could be used to sent to the client the output of the pull
-	// io.Copy(os.Stdout, out)
+func (c ContainerController) CreateNewDB(conf dbContainerConfig, env []string) (string, error) {
+	// //pull the image, it wont pull it if it is already there
+	// //it will update itself since if there is no tag by default it means latest
+	// out, err := c.cli.ImagePull(c.ctx, conf.image, types.ImagePullOptions{})
+	// if err != nil {
+	// 	return "", err
+	// }
+	// defer out.Close()
+	// //!could be used to sent to the client the output of the pull
+	// // io.Copy(os.Stdout, out)
 
 	//container config (image and environment variables)
 	config := &container.Config{
-		Image: image,
+		Image: conf.image,
 		Env:   env,
 	}
-
 	//host config
 	hostBinding := nat.PortBinding{
 		HostIP: "0.0.0.0",
@@ -73,7 +58,9 @@ func (c Controller) CreateNewDB(DbType, image, port string, env []string) (strin
 	}
 
 	//set the port for the container (internal one)
-	containerPort, err := nat.NewPort("tcp", port)
+
+	containerPort, err := nat.NewPort("tcp", conf.port)
+	fmt.Println("container port", containerPort)
 	if err != nil {
 		return "", err
 	}
@@ -85,7 +72,6 @@ func (c Controller) CreateNewDB(DbType, image, port string, env []string) (strin
 	//set the configuration of the host
 	//set the port bindings and the restart policy
 	//!choose a restart policy
-	//!define the volume
 	hostConfig := &container.HostConfig{
 		PortBindings: portBinding,
 		RestartPolicy: container.RestartPolicy{
@@ -98,11 +84,6 @@ func (c Controller) CreateNewDB(DbType, image, port string, env []string) (strin
 		// 		Source: volumePath,
 		// 		Target: "/var/lib/mysql",
 		// 	},
-		// },
-
-		//!should change, this is only for mysql
-		// Binds: []string{
-		// 	fmt.Sprintf("%s:/var/lib/mysql", volumePath),
 		// },
 	}
 
@@ -118,11 +99,23 @@ func (c Controller) CreateNewDB(DbType, image, port string, env []string) (strin
 		return "", err
 	}
 
+	// statusCh, errCh := c.cli.ContainerWait(c.ctx, resp.ID, container.WaitConditionNotRunning)
+	// select {
+	// case err := <-errCh:
+	// 	if err != nil {
+	// 		return "", err
+	// 	}
+	// case <-statusCh:
+	// }
+
 	return resp.ID, nil
 }
 
-//get the first port opened by the container on the host machine
-func (c Controller) GetContainerExternalPort(id, containerPort string) (string, error) {
+//get the first port opened by the container on the host machine,
+//the sleeps are for windows, when tested on linux they were not necesseary
+func (c ContainerController) GetContainerExternalPort(id, containerPort string) (string, error) {
+	time.Sleep(time.Second)
+
 	//same as docker inspect <id>
 	container, err := c.cli.ContainerInspect(c.ctx, id)
 	if err != nil {
@@ -130,12 +123,25 @@ func (c Controller) GetContainerExternalPort(id, containerPort string) (string, 
 	}
 	//from the network settings we get the port that the container is
 	//listening to internally and from there we get the host one
-	return container.NetworkSettings.Ports[nat.Port(fmt.Sprintf("%s/tcp", containerPort))][0].HostPort, nil
+	i := 0
+	var natted []nat.PortBinding
+	for {
+		time.Sleep(time.Second)
+		if i > 5 {
+			return "", fmt.Errorf("error getting the port of the container")
+		}
+		i++
+		natted = container.NetworkSettings.Ports[nat.Port(fmt.Sprintf("%s/tcp", containerPort))]
+		if len(natted) > 0 {
+			break
+		}
+	}
+	return natted[0].HostPort, nil
 }
 
 //search a volume by name and returns a pointer to the volume (type volumeType.Volume) and an error
 //if the volume doesn't exist the volume pointer will be nil
-func (c *Controller) FindVolume(name string) (volume *types.Volume, err error) {
+func (c *ContainerController) FindVolume(name string) (volume *types.Volume, err error) {
 	//get all the volumes
 	volumes, err := c.cli.VolumeList(context.Background(), filters.NewArgs())
 	if err != nil {
@@ -153,7 +159,7 @@ func (c *Controller) FindVolume(name string) (volume *types.Volume, err error) {
 
 //check if a volume exists, if so returns false, the volume and an error
 //if it doesn't exists it will be created and the output will be true, the volume and an error
-func (c *Controller) EnsureVolume(name string) (created bool, volume *types.Volume, err error) {
+func (c *ContainerController) EnsureVolume(name string) (created bool, volume *types.Volume, err error) {
 	//check if the volume exists (if it doesn't volume will be nil)
 	volume, err = c.FindVolume(name)
 	if err != nil {
@@ -174,7 +180,7 @@ func (c *Controller) EnsureVolume(name string) (created bool, volume *types.Volu
 }
 
 //delete a volume (only if the volume exists, if it doesnt the function will return false)
-func (c *Controller) RemoveVolume(name string) (removed bool, err error) {
+func (c *ContainerController) RemoveVolume(name string) (removed bool, err error) {
 	//search the volume
 	vol, err := c.FindVolume(name)
 	if err != nil {
@@ -194,10 +200,36 @@ func (c *Controller) RemoveVolume(name string) (removed bool, err error) {
 	return true, nil
 }
 
-func init() {
+//create a new controller
+func NewContainerController() (*ContainerController, error) {
 	var err error
-	c, err = NewController()
+
+	c := new(ContainerController)
+	c.ctx = context.Background()
+
+	//creating docker client from env
+	c.cli, err = client.NewClientWithOpts(client.FromEnv)
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
+
+	c.dbContainersConfigs = map[string]dbContainerConfig{
+		"mysql": {
+			name:  "mysql",
+			image: "mysql:8.0.28-oracle",
+			port:  "3306",
+		},
+		"mariadb": {
+			name:  "mariadb",
+			image: "mariadb:10.8.2-rc-focal",
+			port:  "3306",
+		},
+		"mongodb": {
+			name:  "mongodb",
+			image: "mongo:5.0.6",
+			port:  "27017",
+		},
+	}
+
+	return c, nil
 }
