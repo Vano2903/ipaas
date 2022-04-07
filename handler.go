@@ -35,15 +35,82 @@ func (h Handler) GetUserFromCookie(r *http.Request, connection *sql.DB) (Student
 	return s, nil
 }
 
-/*
-this middleware validates if the users has a valid access token
-what it does/check:
-1) check the validity of the refresh token
-2) if the access token is found/valid, since this runs after the check of the refresh token
-the middleware will generate a new pair of tokens if the access token is expired/not found and
-save them in the session
-3) if it pass all the check it will run the func given as parameter
-*/
+func (h Handler) NewTokenPairFromRefreshTokenHandler(w http.ResponseWriter, r *http.Request) {
+	db, err := connectToDB()
+	if err != nil {
+		resp.Error(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	defer db.Close()
+
+	//get the refresh token from the cookie
+	cookie, err := r.Cookie("refreshToken")
+	if err != nil {
+		if err == http.ErrNoCookie {
+			resp.Error(w, http.StatusBadRequest, "No refresh token")
+			return
+		}
+		resp.Error(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	refreshToken := cookie.Value
+	log.Println("refresh token found:", refreshToken)
+
+	if refreshToken == "" {
+		resp.Error(w, http.StatusBadRequest, "No refresh token")
+		return
+	}
+
+	//check if the refresh token is expired
+	if IsTokenExpired(false, refreshToken, db) {
+		//!should redirect to the oauth page
+		resp.Error(w, http.StatusBadRequest, "Refresh token is expired")
+		return
+	}
+
+	//generate a new token pair
+	accessToken, newRefreshToken, err := GenerateNewTokenPairFromRefreshToken(refreshToken, db)
+	if err != nil {
+		resp.Error(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	//delete the old tokens from the cookies
+	http.SetCookie(w, &http.Cookie{
+		Name:    "accessToken",
+		Path:    "/",
+		Value:   "",
+		Expires: time.Unix(0, 0),
+	})
+	http.SetCookie(w, &http.Cookie{
+		Name:    "refreshToken",
+		Path:    "/",
+		Value:   "",
+		Expires: time.Unix(0, 0),
+	})
+
+	//!should set domain and path
+	http.SetCookie(w, &http.Cookie{
+		Name:    "accessToken",
+		Path:    "/",
+		Value:   accessToken,
+		Expires: time.Now().Add(time.Hour),
+	})
+	http.SetCookie(w, &http.Cookie{
+		Name:    "refreshToken",
+		Path:    "/",
+		Value:   newRefreshToken,
+		Expires: time.Now().Add(time.Hour * 24 * 7),
+	})
+
+	response := map[string]interface{}{
+		"accessToken":  accessToken,
+		"refreshToken": newRefreshToken,
+	}
+	resp.SuccessParse(w, http.StatusOK, "New token pair generated", response)
+}
+
+//check if the user has a valid access Token
 func (h Handler) TokensMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		log.Println("tokens middleware")
@@ -55,14 +122,7 @@ func (h Handler) TokensMiddleware(next http.Handler) http.Handler {
 			switch cookie.Name {
 			case "accessToken":
 				accessToken = cookie.Value
-			case "refreshToken":
-				refreshToken = cookie.Value
 			}
-		}
-
-		if refreshToken == "" {
-			resp.Error(w, http.StatusBadRequest, "No refresh token, you should visit the oauth page")
-			return
 		}
 
 		//create a connection with the db
