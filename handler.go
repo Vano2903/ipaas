@@ -27,6 +27,12 @@ func (h Handler) GetUserFromCookie(r *http.Request, connection *sql.DB) (Student
 		}
 	}
 
+	if acc == "" {
+		return Student{}, fmt.Errorf("no access token found")
+	}
+
+	fmt.Println("access Token found from get user from cookie:", acc)
+
 	s, err := GetUserFromAccessToken(acc, connection)
 	if err != nil {
 		return Student{}, err
@@ -178,6 +184,8 @@ func (h Handler) TokensMiddleware(next http.Handler) http.Handler {
 				Expires: time.Now().Add(time.Hour * 24 * 7),
 			})
 		}
+		w.Header().Set("content-type", "application/json")
+		w.Write([]byte(""))
 
 		//redirect to the actual handler
 		next.ServeHTTP(w, r)
@@ -192,9 +200,26 @@ func (h Handler) TokensMiddleware(next http.Handler) http.Handler {
 //2) db type (mysql, mariadb, mongodb)
 //3) (not implemented) db version (can be null which will mean the latest version)
 func (h Handler) NewDBHandler(w http.ResponseWriter, r *http.Request) {
+
+	//connect to the db
+	conn, err := connectToDB()
+	if err != nil {
+		resp.Errorf(w, http.StatusInternalServerError, "error connecting to the database: %v", err.Error())
+		return
+	}
+	defer conn.Close()
+	//get the student from the cookies
+	student, err := h.GetUserFromCookie(r, conn)
+	if err != nil {
+		resp.Errorf(w, http.StatusInternalServerError, "error getting the user from cookies: %v", err.Error())
+		return
+	}
+
+	fmt.Println("student: ", student)
+
 	//read post body
 	var dbPost dbPost
-	err := json.NewDecoder(r.Body).Decode(&dbPost)
+	err = json.NewDecoder(r.Body).Decode(&dbPost)
 	if err != nil {
 		resp.Errorf(w, http.StatusBadRequest, "error decoding the json: %v", err.Error())
 		return
@@ -238,22 +263,9 @@ func (h Handler) NewDBHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	//connect to the db
-	conn, err := connectToDB()
-	if err != nil {
-		resp.Errorf(w, http.StatusInternalServerError, "error connecting to the database: %v", err.Error())
-		return
-	}
-
-	//get the student from the cookies
-	student, err := h.GetUserFromCookie(r, conn)
-	if err != nil {
-		resp.Errorf(w, http.StatusInternalServerError, "error getting the user from cookies: %v", err.Error())
-	}
-
 	//add a new database application created by the student (student id)
 	insertApplicationQuery := `
-	INSERT INTO applications (dockerid, status, creator, apptype, name, description) VALUES (?, ?, ?, ?, ?, ?)
+	INSERT INTO applications (containerID, status, studentID, type, name, description) VALUES (?, ?, ?, ?, ?, ?)
 	`
 
 	_, err = conn.Exec(insertApplicationQuery, id, "up", student.ID, "database", fmt.Sprintf("%d:%s/%s", student.ID, dbPost.DbType, dbPost.DbName), "")
