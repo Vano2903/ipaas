@@ -41,6 +41,7 @@ func (h Handler) GetUserFromCookie(r *http.Request, connection *sql.DB) (Student
 	return s, nil
 }
 
+//generate a new token pair from the refresh token saved in the cookies
 func (h Handler) NewTokenPairFromRefreshTokenHandler(w http.ResponseWriter, r *http.Request) {
 	db, err := connectToDB()
 	if err != nil {
@@ -120,15 +121,19 @@ func (h Handler) NewTokenPairFromRefreshTokenHandler(w http.ResponseWriter, r *h
 func (h Handler) TokensMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		log.Println("tokens middleware")
-		// get the access token and the refresh token from cookies
 
+		// get the access token from cookies
 		var accessToken string
-		var refreshToken string
 		for _, cookie := range r.Cookies() {
 			switch cookie.Name {
 			case "accessToken":
 				accessToken = cookie.Value
 			}
+		}
+
+		if accessToken == "" {
+			resp.Error(w, http.StatusBadRequest, "No access token")
+			return
 		}
 
 		//create a connection with the db
@@ -138,54 +143,11 @@ func (h Handler) TokensMiddleware(next http.Handler) http.Handler {
 			return
 		}
 		defer db.Close()
-		//check if the refresh token is expired
-		if IsTokenExpired(false, refreshToken, db) {
-			//!should redirect to the oauth page
-			resp.Error(w, http.StatusBadRequest, "Refresh token is expired")
+
+		if IsTokenExpired(true, accessToken, db) {
+			resp.Error(w, http.StatusBadRequest, "Access token is expired")
 			return
 		}
-
-		//check if the access token is found and valid
-		if accessToken == "" || IsTokenExpired(true, accessToken, db) {
-			var newRefreshToken string
-			//generate a new token pair
-			accessToken, newRefreshToken, err = GenerateNewTokenPairFromRefreshToken(refreshToken, db)
-			if err != nil {
-				resp.Error(w, http.StatusInternalServerError, err.Error())
-				return
-			}
-
-			//delete the old tokens from the cookies
-			http.SetCookie(w, &http.Cookie{
-				Name:    "accessToken",
-				Path:    "/",
-				Value:   "",
-				Expires: time.Unix(0, 0),
-			})
-			http.SetCookie(w, &http.Cookie{
-				Name:    "refreshToken",
-				Path:    "/",
-				Value:   "",
-				Expires: time.Unix(0, 0),
-			})
-
-			//set the new tokens as cookie
-			//!should set domain and path
-			http.SetCookie(w, &http.Cookie{
-				Name:    "accessToken",
-				Path:    "/",
-				Value:   accessToken,
-				Expires: time.Now().Add(time.Hour),
-			})
-			http.SetCookie(w, &http.Cookie{
-				Name:    "refreshToken",
-				Path:    "/",
-				Value:   newRefreshToken,
-				Expires: time.Now().Add(time.Hour * 24 * 7),
-			})
-		}
-		w.Header().Set("content-type", "application/json")
-		w.Write([]byte(""))
 
 		//redirect to the actual handler
 		next.ServeHTTP(w, r)
@@ -200,7 +162,6 @@ func (h Handler) TokensMiddleware(next http.Handler) http.Handler {
 //2) db type (mysql, mariadb, mongodb)
 //3) (not implemented) db version (can be null which will mean the latest version)
 func (h Handler) NewDBHandler(w http.ResponseWriter, r *http.Request) {
-
 	//connect to the db
 	conn, err := connectToDB()
 	if err != nil {
