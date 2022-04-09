@@ -200,6 +200,13 @@ func (c *ContainerController) RemoveVolume(name string) (removed bool, err error
 	return true, nil
 }
 
+//forcefully remove a container from the container id
+func (c *ContainerController) DeleteContainer(containerID string) error {
+	return c.cli.ContainerRemove(c.ctx, containerID, types.ContainerRemoveOptions{
+		Force: true,
+	})
+}
+
 //create a new controller
 func NewContainerController() (*ContainerController, error) {
 	var err error
