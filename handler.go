@@ -111,7 +111,7 @@ func (h Handler) TokensMiddleware(next http.Handler) http.Handler {
 		}
 
 		if accessToken == "" {
-			resp.Error(w, http.StatusBadRequest, "No access token")
+			resp.Error(w, 498, "No access token")
 			return
 		}
 
@@ -124,7 +124,7 @@ func (h Handler) TokensMiddleware(next http.Handler) http.Handler {
 		defer db.Close()
 
 		if IsTokenExpired(true, accessToken, db) {
-			resp.Error(w, http.StatusBadRequest, "Access token is expired")
+			resp.Error(w, 498, "Access token is expired")
 			return
 		}
 
@@ -154,8 +154,6 @@ func (h Handler) NewDBHandler(w http.ResponseWriter, r *http.Request) {
 		resp.Errorf(w, http.StatusInternalServerError, "error getting the user from cookies: %v", err.Error())
 		return
 	}
-
-	fmt.Println("student: ", student)
 
 	//read post body
 	var dbPost dbPost
@@ -228,35 +226,6 @@ func (h Handler) NewDBHandler(w http.ResponseWriter, r *http.Request) {
 	resp.SuccessParse(w, http.StatusOK, "New DB created", json)
 }
 
-func (h Handler) ExportDBHandler(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	containerID := vars["containerID"]
-	dbName := vars["dbName"]
-	//connect to the db
-	conn, err := connectToDB()
-	if err != nil {
-		resp.Errorf(w, http.StatusInternalServerError, "error connecting to the database: %v", err.Error())
-		return
-	}
-	defer conn.Close()
-	//get the student from the cookies
-	student, err := h.util.GetUserFromCookie(r, conn)
-	if err != nil {
-		resp.Errorf(w, http.StatusInternalServerError, "error getting the user from cookies: %v", err.Error())
-		return
-	}
-
-	//check if the user owns the db container
-	var app Application
-	err = conn.QueryRow(`SELECT * FROM applications WHERE type='database' AND studentID = ? AND containerID = ?`).Scan(&app.ID, &app.ContainerID, &app.Status, &app.StudentID, &app.Type, &app.Name, &app.Description)
-	if err != nil{
-		if err == sql.ErrNoRows{
-			resp.Error(w, http.StatusBadRequest, "application not found, check if the container id is correct and make sure you own this database")
-		}
-	}
-
-}
-
 func (h Handler) DeleteApplicationHandler(w http.ResponseWriter, r *http.Request) {
 	containerID := mux.Vars(r)["containerID"]
 
@@ -276,7 +245,7 @@ func (h Handler) DeleteApplicationHandler(w http.ResponseWriter, r *http.Request
 	}
 
 	var app Application
-	err = conn.QueryRow(`SELECT * FROM applications WHERE studentID = ? AND containerID = ?`, student.ID, containerID).Scan(&app.ID, &app.ContainerID, &app.Status, &app.StudentID, &app.Type, &app.Name, &app.Description)
+	err = conn.QueryRow(`SELECT * FROM applications WHERE studentID = ? AND containerID = ?`, student.ID, containerID).Scan(&app.ID, &app.ContainerID, &app.Status, &app.StudentID, &app.Type, &app.Name, &app.Description, &app.CreatedAt, &app.IsPublic)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			resp.Errorf(w, http.StatusBadRequest, "application not found, the application might have the wrong container id or you dont own it")
@@ -342,7 +311,7 @@ func (h Handler) GetAllApplicationsOfStudentPrivate(w http.ResponseWriter, r *ht
 	var applications []Application
 	for rows.Next() {
 		var app Application
-		err = rows.Scan(&app.ID, &app.ContainerID, &app.Status, &app.StudentID, &app.Type, &app.Name, &app.Description)
+		err = rows.Scan(&app.ID, &app.ContainerID, &app.Status, &app.StudentID, &app.Type, &app.Name, &app.Description, &app.CreatedAt, &app.IsPublic)
 		if err != nil {
 			resp.Errorf(w, http.StatusInternalServerError, "error getting the applications: %v", err.Error())
 			return
@@ -376,7 +345,7 @@ func (h Handler) GetAllApplicationsOfStudentPublic(w http.ResponseWriter, r *htt
 	var applications []Application
 	for rows.Next() {
 		var app Application
-		err = rows.Scan(&app.ID, &app.ContainerID, &app.Status, &app.StudentID, &app.Type, &app.Name, &app.Description)
+		err = rows.Scan(&app.ID, &app.ContainerID, &app.Status, &app.StudentID, &app.Type, &app.Name, &app.Description, &app.CreatedAt, &app.IsPublic)
 		if err != nil {
 			resp.Errorf(w, http.StatusInternalServerError, "error getting the applications: %v", err.Error())
 			return
@@ -557,3 +526,47 @@ func NewHandler() (*Handler, error) {
 	}
 	return &h, nil
 }
+
+//!BACKLOG, UNDER DEVELOPMENT
+
+//! under development, not implementing it now
+//! if you want to export the database use an external tool
+// /user/
+// func (h Handler) ExportDBHandler(w http.ResponseWriter, r *http.Request) {
+// 	vars := mux.Vars(r)
+// 	containerID := vars["containerID"]
+
+// 	//read the post body
+// 	var dbPost dbPost
+// 	err := json.NewDecoder(r.Body).Decode(&dbPost)
+// 	if err != nil {
+// 		resp.Errorf(w, http.StatusBadRequest, "error decoding the json: %v", err.Error())
+// 		return
+// 	}
+
+// 	//connect to the db
+// 	conn, err := connectToDB()
+// 	if err != nil {
+// 		resp.Errorf(w, http.StatusInternalServerError, "error connecting to the database: %v", err.Error())
+// 		return
+// 	}
+// 	defer conn.Close()
+// 	//get the student from the cookies
+// 	student, err := h.util.GetUserFromCookie(r, conn)
+// 	if err != nil {
+// 		resp.Errorf(w, http.StatusInternalServerError, "error getting the user from cookies: %v", err.Error())
+// 		return
+// 	}
+
+// 	//check if the user owns the db container
+// 	var app Application
+// 	err = conn.QueryRow(`SELECT * FROM applications WHERE type='database' AND studentID = ? AND containerID = ?`, student.ID, containerID).Scan(&app.ID, &app.ContainerID, &app.Status, &app.StudentID, &app.Type, &app.Name, &app.Description)
+// 	if err != nil {
+// 		if err == sql.ErrNoRows {
+// 			resp.Error(w, http.StatusBadRequest, "application not found, check if the container id is correct and make sure you own this database")
+// 		}
+// 	}
+
+// 	dbPost.DbType = strings.Split(strings.Split(app.Name, ":")[1], "/")[0]
+
+// }
