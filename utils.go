@@ -2,7 +2,9 @@ package main
 
 import (
 	"database/sql"
+	"fmt"
 	"math/rand"
+	"net/http"
 	"strings"
 	"time"
 
@@ -16,6 +18,36 @@ var (
 	numberSet    = "0123456789"
 	allCharSet   = lowerCharSet + upperCharSet + numberSet
 )
+
+type Util struct {
+}
+
+func (u Util) GetUserFromCookie(r *http.Request, connection *sql.DB) (Student, error) {
+	var acc string
+	for _, cookie := range r.Cookies() {
+		switch cookie.Name {
+		case "accessToken":
+			acc = cookie.Value
+		}
+	}
+
+	if acc == "" {
+		return Student{}, fmt.Errorf("no access token found")
+	}
+
+	fmt.Println("access Token found from get user from cookie:", acc)
+
+	s, err := GetUserFromAccessToken(acc, connection)
+	if err != nil {
+		return Student{}, err
+	}
+
+	return s, nil
+}
+
+func NewUtil() (*Util, error) {
+	return &Util{}, nil
+}
 
 //returns a pointer to a db connection
 func connectToDB() (db *sql.DB, err error) {
