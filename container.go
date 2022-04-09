@@ -14,9 +14,10 @@ import (
 )
 
 type dbPost struct {
-	DbName    string `json:"databaseName"`
-	DbType    string `json:"databaseType"`
-	DbVersion string `json:"databaseVersion"`
+	DbName            string `json:"databaseName"`
+	DbType            string `json:"databaseType"`
+	DbVersion         string `json:"databaseVersion"`
+	DbTableCollection string `json:"databaseTable"`
 }
 
 type ContainerController struct {
@@ -110,6 +111,8 @@ func (c ContainerController) CreateNewDB(conf dbContainerConfig, env []string) (
 
 	return resp.ID, nil
 }
+
+
 
 //get the first port opened by the container on the host machine,
 //the sleeps are for windows, when tested on linux they were not necesseary
@@ -240,3 +243,50 @@ func NewContainerController() (*ContainerController, error) {
 
 	return c, nil
 }
+
+
+//!BACKLOG, UNDER DEVELOPMENT
+
+// func (c ContainerController) ExportDBData(containerID string, dbData dbPost) (string, error) {
+// 	//docker exec CONTAINER /usr/bin/mysqldump -u root --password=root DATABASE > /tmp/DATABASE.sql
+
+// 	//check if the container id is an exadecimal string
+// 	_, err := strconv.ParseUint(containerID, 16, 64)
+// 	if err != nil {
+// 		return "", errors.New("not a valid container id")
+// 	}
+
+// 	//get the container
+// 	container, err := c.cli.ContainerInspect(c.ctx, containerID)
+// 	if err != nil {
+// 		return "", err
+// 	}
+
+// 	//get the database password
+
+// 	switch dbData.DbType {
+// 	case "mysql", "mariadb":
+// 		//get the database password from enviroment variables
+// 		dbPassword := container.Config.Env[1]
+// 		//create the command
+// 		cmd := fmt.Sprintf("docker exec %s /usr/bin/mysqldump -u root --password=%s %s > /tmp/%s.sql", dbPassword, dbName, containerID)
+// 		//execute the command
+// 		out, err := exec.Command("sh", "-c", cmd).Output()
+// 		if err != nil {
+// 			return "", err
+// 		}
+// 		log.Println("output", out)
+// 	case "mongodb":
+// 		//get the database password from enviroment variables
+// 		dbPassword := container.Config.Env[2]
+// 		//create the command
+// 		cmd := fmt.Sprintf("docker exec %s /usr/bin/mysqldump -u root --password=%s %s > /tmp/%s.sql", dbPassword, dbName, containerID)
+// 		//execute the command
+// 		out, err := exec.Command("sh", "-c", cmd).Output()
+// 		if err != nil {
+// 			return "", err
+// 		}
+// 		log.Println("output", out)
+
+// 	}
+// }
