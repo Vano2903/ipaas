@@ -22,7 +22,9 @@ var (
 type Util struct {
 }
 
+//get the student from the database given a valid access token (will be retrived from cookies)
 func (u Util) GetUserFromCookie(r *http.Request, connection *sql.DB) (Student, error) {
+	//search the access token in the cookies
 	var acc string
 	for _, cookie := range r.Cookies() {
 		switch cookie.Name {
@@ -31,12 +33,12 @@ func (u Util) GetUserFromCookie(r *http.Request, connection *sql.DB) (Student, e
 		}
 	}
 
+	//check if it's not empty
 	if acc == "" {
 		return Student{}, fmt.Errorf("no access token found")
 	}
 
-	fmt.Println("access Token found from get user from cookie:", acc)
-
+	//get the student from the database, it will automatically check if the access token is valid
 	s, err := GetUserFromAccessToken(acc, connection)
 	if err != nil {
 		return Student{}, err
@@ -45,6 +47,8 @@ func (u Util) GetUserFromCookie(r *http.Request, connection *sql.DB) (Student, e
 	return s, nil
 }
 
+//generate a new pointer to the util struct
+//is like a constructor
 func NewUtil() (*Util, error) {
 	return &Util{}, nil
 }
