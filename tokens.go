@@ -40,7 +40,7 @@ func GenerateTokenPair(userID int, connection *sql.DB) (string, string, error) {
 	//generate the access token and it expires in 1 hour
 	for {
 		pair.AccessToken = generateRandomString(64)
-		pair.ExpirationAccessToken = time.Now().Add(time.Minute)
+		pair.ExpirationAccessToken = time.Now().Add(time.Hour)
 		//check if the access token is already in the database
 		found, err := tokenExists(pair.AccessToken, connection)
 		if err != nil {
