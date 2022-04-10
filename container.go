@@ -112,12 +112,11 @@ func (c ContainerController) CreateNewDB(conf dbContainerConfig, env []string) (
 	return resp.ID, nil
 }
 
-
-
 //get the first port opened by the container on the host machine,
 //the sleeps are for windows, when tested on linux they were not necesseary
 func (c ContainerController) GetContainerExternalPort(id, containerPort string) (string, error) {
-	time.Sleep(time.Second)
+	//!the sleeps looks like it's only required for windows
+	// time.Sleep(time.Second)
 
 	//same as docker inspect <id>
 	container, err := c.cli.ContainerInspect(c.ctx, id)
@@ -126,6 +125,7 @@ func (c ContainerController) GetContainerExternalPort(id, containerPort string) 
 	}
 	//from the network settings we get the port that the container is
 	//listening to internally and from there we get the host one
+	//!thecnically this should only be necessary for windows but for some "good practice" we will leave it here
 	i := 0
 	var natted []nat.PortBinding
 	for {
@@ -134,6 +134,7 @@ func (c ContainerController) GetContainerExternalPort(id, containerPort string) 
 			return "", fmt.Errorf("error getting the port of the container")
 		}
 		i++
+		//get the external port from the docker inspect command
 		natted = container.NetworkSettings.Ports[nat.Port(fmt.Sprintf("%s/tcp", containerPort))]
 		if len(natted) > 0 {
 			break
@@ -243,7 +244,6 @@ func NewContainerController() (*ContainerController, error) {
 
 	return c, nil
 }
-
 
 //!BACKLOG, UNDER DEVELOPMENT
 

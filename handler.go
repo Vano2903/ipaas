@@ -20,81 +20,7 @@ type Handler struct {
 	util *Util
 }
 
-//generate a new token pair from the refresh token saved in the cookies
-func (h Handler) NewTokenPairFromRefreshTokenHandler(w http.ResponseWriter, r *http.Request) {
-	db, err := connectToDB()
-	if err != nil {
-		resp.Error(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	defer db.Close()
-
-	//get the refresh token from the cookie
-	cookie, err := r.Cookie("refreshToken")
-	if err != nil {
-		if err == http.ErrNoCookie {
-			resp.Error(w, http.StatusBadRequest, "No refresh token")
-			return
-		}
-		resp.Error(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	refreshToken := cookie.Value
-	log.Println("refresh token found:", refreshToken)
-
-	if refreshToken == "" {
-		resp.Error(w, http.StatusBadRequest, "No refresh token")
-		return
-	}
-
-	//check if the refresh token is expired
-	if IsTokenExpired(false, refreshToken, db) {
-		//!should redirect to the oauth page
-		resp.Error(w, http.StatusBadRequest, "Refresh token is expired")
-		return
-	}
-
-	//generate a new token pair
-	accessToken, newRefreshToken, err := GenerateNewTokenPairFromRefreshToken(refreshToken, db)
-	if err != nil {
-		resp.Error(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	//delete the old tokens from the cookies
-	http.SetCookie(w, &http.Cookie{
-		Name:    "accessToken",
-		Path:    "/",
-		Value:   "",
-		Expires: time.Unix(0, 0),
-	})
-	http.SetCookie(w, &http.Cookie{
-		Name:    "refreshToken",
-		Path:    "/",
-		Value:   "",
-		Expires: time.Unix(0, 0),
-	})
-
-	//!should set domain and path
-	http.SetCookie(w, &http.Cookie{
-		Name:    "accessToken",
-		Path:    "/",
-		Value:   accessToken,
-		Expires: time.Now().Add(time.Hour),
-	})
-	http.SetCookie(w, &http.Cookie{
-		Name:    "refreshToken",
-		Path:    "/",
-		Value:   newRefreshToken,
-		Expires: time.Now().Add(time.Hour * 24 * 7),
-	})
-
-	response := map[string]interface{}{
-		"accessToken":  accessToken,
-		"refreshToken": newRefreshToken,
-	}
-	resp.SuccessParse(w, http.StatusOK, "New token pair generated", response)
-}
+//!===========================MIDDLEWARES
 
 //check if the user has a valid access Token
 func (h Handler) TokensMiddleware(next http.Handler) http.Handler {
@@ -110,6 +36,8 @@ func (h Handler) TokensMiddleware(next http.Handler) http.Handler {
 			}
 		}
 
+		//check if it's not empty
+		//498 => token invalid/expired
 		if accessToken == "" {
 			resp.Error(w, 498, "No access token")
 			return
@@ -123,6 +51,7 @@ func (h Handler) TokensMiddleware(next http.Handler) http.Handler {
 		}
 		defer db.Close()
 
+		//check if it's expired
 		if IsTokenExpired(true, accessToken, db) {
 			resp.Error(w, 498, "Access token is expired")
 			return
@@ -132,6 +61,8 @@ func (h Handler) TokensMiddleware(next http.Handler) http.Handler {
 		next.ServeHTTP(w, r)
 	})
 }
+
+//!===========================DATABASE RELATED HANDLERS
 
 //! still under development
 //new database handler, let the user create a new database given the default db name (can be null)
@@ -168,17 +99,22 @@ func (h Handler) NewDBHandler(w http.ResponseWriter, r *http.Request) {
 	var env []string
 	switch dbPost.DbType {
 	case "mysql", "mariadb":
+		//root password
 		env = []string{
 			"MYSQL_ROOT_PASSWORD=" + password,
 		}
+		//set a database if it's not empty
 		if dbPost.DbName != "" {
 			env = append(env, "MYSQL_DATABASE="+dbPost.DbName)
 		}
 	case "mongodb":
+		//root password
 		env = []string{
 			"MONGO_INITDB_ROOT_USERNAME=" + "root",
 			"MONGO_INITDB_ROOT_PASSWORD=" + password,
 		}
+		//set a database if it's not empty
+		//!apparently this part doesn't work, the user can create the db on it's own though
 		if dbPost.DbName != "" {
 			env = append(env, "MONGO_INITDB_DATABASE="+dbPost.DbName)
 		}
@@ -206,6 +142,7 @@ func (h Handler) NewDBHandler(w http.ResponseWriter, r *http.Request) {
 	INSERT INTO applications (containerID, status, studentID, type, name, description) VALUES (?, ?, ?, ?, ?, ?)
 	`
 
+	//exec the query, the status will be up and type database, the name will follow the nomenclature of <studentID>:<dbType>/<dbName>
 	_, err = conn.Exec(insertApplicationQuery, id, "up", student.ID, "database", fmt.Sprintf("%d:%s/%s", student.ID, dbPost.DbType, dbPost.DbName), "")
 	if err != nil {
 		resp.Errorf(w, http.StatusInternalServerError, "unable to link the application to the user: %v", err.Error())
@@ -226,7 +163,11 @@ func (h Handler) NewDBHandler(w http.ResponseWriter, r *http.Request) {
 	resp.SuccessParse(w, http.StatusOK, "New DB created", json)
 }
 
+//!===========================APPLICATIONS RELATED HANDLERS
+
+//delete a container given the container id, it will check if the user owns this application
 func (h Handler) DeleteApplicationHandler(w http.ResponseWriter, r *http.Request) {
+	//get the container from /{containerID}
 	containerID := mux.Vars(r)["containerID"]
 
 	//connect to the db
@@ -244,6 +185,7 @@ func (h Handler) DeleteApplicationHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	//get the application from the database and check if it's owned by the student
 	var app Application
 	err = conn.QueryRow(`SELECT * FROM applications WHERE studentID = ? AND containerID = ?`, student.ID, containerID).Scan(&app.ID, &app.ContainerID, &app.Status, &app.StudentID, &app.Type, &app.Name, &app.Description, &app.CreatedAt, &app.IsPublic)
 	if err != nil {
@@ -262,6 +204,7 @@ func (h Handler) DeleteApplicationHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	//delete the application from the database
 	_, err = conn.Exec(`DELETE FROM applications WHERE containerID = ?`, containerID)
 	if err != nil {
 		resp.Errorf(w, http.StatusInternalServerError, "error deleting the application: %v", err.Error())
@@ -270,8 +213,10 @@ func (h Handler) DeleteApplicationHandler(w http.ResponseWriter, r *http.Request
 	resp.Success(w, http.StatusOK, "container deleted successfully")
 }
 
+//it will return a json with all the applications owned by the student (even the privates one)
+//this endpoint will only be accessible if logged in
 func (h Handler) GetAllApplicationsOfStudentPrivate(w http.ResponseWriter, r *http.Request) {
-	//get the {type} from the url
+	//get the {type} of the application from the url
 	typeOfApp := mux.Vars(r)["type"]
 	if typeOfApp != "database" && typeOfApp != "web" && typeOfApp != "all" {
 		resp.Error(w, http.StatusBadRequest, "Invalid type of application")
@@ -285,6 +230,7 @@ func (h Handler) GetAllApplicationsOfStudentPrivate(w http.ResponseWriter, r *ht
 		return
 	}
 	defer conn.Close()
+
 	//get the student from the cookies
 	student, err := h.util.GetUserFromCookie(r, conn)
 	if err != nil {
@@ -292,6 +238,7 @@ func (h Handler) GetAllApplicationsOfStudentPrivate(w http.ResponseWriter, r *ht
 		return
 	}
 
+	//get the applications from the database
 	var rows *sql.Rows
 	if typeOfApp == "all" {
 		rows, err = conn.Query("SELECT * FROM applications WHERE studentID = ?", student.ID)
@@ -307,7 +254,7 @@ func (h Handler) GetAllApplicationsOfStudentPrivate(w http.ResponseWriter, r *ht
 		}
 	}
 
-	//get all the applications of the student
+	//parse the rows into a []Application and return it
 	var applications []Application
 	for rows.Next() {
 		var app Application
@@ -322,9 +269,12 @@ func (h Handler) GetAllApplicationsOfStudentPrivate(w http.ResponseWriter, r *ht
 	resp.SuccessParse(w, http.StatusOK, "Applications", applications)
 }
 
+//get all the public applications of a student given the student id
+//you dont need to be logged in to access this endpoint
 func (h Handler) GetAllApplicationsOfStudentPublic(w http.ResponseWriter, r *http.Request) {
 	//get the {studentID} from the url
 	studentID := mux.Vars(r)["studentID"]
+
 	conn, err := connectToDB()
 	if err != nil {
 		resp.Errorf(w, http.StatusInternalServerError, "error connecting to the database: %v", err.Error())
@@ -332,6 +282,7 @@ func (h Handler) GetAllApplicationsOfStudentPublic(w http.ResponseWriter, r *htt
 	}
 	defer conn.Close()
 
+	//get all the public web applications of the student
 	rows, err := conn.Query("SELECT * FROM applications WHERE type = 'web' AND isPublic = 1 AND studentID = ?", studentID)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -342,6 +293,7 @@ func (h Handler) GetAllApplicationsOfStudentPublic(w http.ResponseWriter, r *htt
 		return
 	}
 
+	//parse the rows into a []Application and return it
 	var applications []Application
 	for rows.Next() {
 		var app Application
@@ -355,7 +307,10 @@ func (h Handler) GetAllApplicationsOfStudentPublic(w http.ResponseWriter, r *htt
 	resp.SuccessParse(w, http.StatusOK, "Public applications of "+studentID, applications)
 }
 
+//!===========================GENERICS HANDLERS
+
 //oauth handler, will handle the 2 steps of the oauth process
+//all the procedure is in https://paleoid.stoplight.io/docs/api/YXBpOjQxNDY4NTk-paleo-id-o-auth2-api
 func (h Handler) OauthHandler(w http.ResponseWriter, r *http.Request) {
 	//connect to the db
 	db, err := connectToDB()
@@ -365,7 +320,7 @@ func (h Handler) OauthHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer db.Close()
 	session, _ := h.sess.Get(r, "ipaas-session")
-	//read url parameters
+	//read url parameters (code and state)
 	parameters := r.URL.Query()
 	UrlCode, okCode := parameters["code"]
 	UrlState, okState := parameters["state"]
@@ -475,7 +430,6 @@ func (h Handler) OauthHandler(w http.ResponseWriter, r *http.Request) {
 
 //get the user's informations from the ipaas access token
 func (h Handler) LoginHandler(w http.ResponseWriter, r *http.Request) {
-	log.Println("login handler")
 	db, err := connectToDB()
 	if err != nil {
 		resp.Error(w, http.StatusInternalServerError, err.Error())
@@ -484,7 +438,7 @@ func (h Handler) LoginHandler(w http.ResponseWriter, r *http.Request) {
 	defer db.Close()
 
 	log.Println("getting access token")
-	//get the accesstoken from the cookie
+	//get the access token from the cookie
 	cookie, err := r.Cookie("accessToken")
 	if err != nil {
 		if err == http.ErrNoCookie {
@@ -497,6 +451,7 @@ func (h Handler) LoginHandler(w http.ResponseWriter, r *http.Request) {
 	accessToken := cookie.Value
 	log.Println("access token found:", accessToken)
 
+	//get the student generic infos from the access token
 	student, err := GetUserFromAccessToken(accessToken, db)
 	fmt.Println("studente:", student)
 	if err != nil {
@@ -504,14 +459,91 @@ func (h Handler) LoginHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	studentByte, err := json.MarshalIndent(student, "", "  ")
+	resp.SuccessParse(w, http.StatusOK, "User", student)
+}
+
+//generate a new token pair from the refresh token saved in the cookies
+func (h Handler) NewTokenPairFromRefreshTokenHandler(w http.ResponseWriter, r *http.Request) {
+
+	//get the refresh token from the cookie
+	cookie, err := r.Cookie("refreshToken")
+	if err != nil {
+		if err == http.ErrNoCookie {
+			resp.Error(w, http.StatusBadRequest, "No refresh token")
+			return
+		}
+		resp.Error(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	refreshToken := cookie.Value
+	log.Println("refresh token found:", refreshToken)
+
+	//check if there is a refresh token
+	if refreshToken == "" {
+		resp.Error(w, 498, "No refresh token")
+		return
+	}
+
+	//connection to db
+	db, err := connectToDB()
 	if err != nil {
 		resp.Error(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	resp.SuccessJson(w, http.StatusOK, "User", studentByte)
+	defer db.Close()
+
+	//check if the refresh token is expired
+	if IsTokenExpired(false, refreshToken, db) {
+		//!should redirect to the oauth page
+		resp.Error(w, 498, "Refresh token is expired")
+		return
+	}
+
+	//generate a new token pair
+	accessToken, newRefreshToken, err := GenerateNewTokenPairFromRefreshToken(refreshToken, db)
+	if err != nil {
+		resp.Error(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	//delete the old tokens from the cookies
+	http.SetCookie(w, &http.Cookie{
+		Name:    "accessToken",
+		Path:    "/",
+		Value:   "",
+		Expires: time.Unix(0, 0),
+	})
+	http.SetCookie(w, &http.Cookie{
+		Name:    "refreshToken",
+		Path:    "/",
+		Value:   "",
+		Expires: time.Unix(0, 0),
+	})
+
+	//set the new tokens
+	//!should set domain and path
+	http.SetCookie(w, &http.Cookie{
+		Name:    "accessToken",
+		Path:    "/",
+		Value:   accessToken,
+		Expires: time.Now().Add(time.Hour),
+	})
+	http.SetCookie(w, &http.Cookie{
+		Name:    "refreshToken",
+		Path:    "/",
+		Value:   newRefreshToken,
+		Expires: time.Now().Add(time.Hour * 24 * 7),
+	})
+
+	//we also respond with the new tokens so the client doesn't have to depend from the cookies
+	response := map[string]interface{}{
+		"accessToken":  accessToken,
+		"refreshToken": newRefreshToken,
+	}
+	resp.SuccessParse(w, http.StatusOK, "New token pair generated", response)
 }
 
+//constructor
 func NewHandler() (*Handler, error) {
 	var h Handler
 	var err error
