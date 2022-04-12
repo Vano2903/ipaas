@@ -3,13 +3,17 @@ package main
 import (
 	"context"
 	"fmt"
+	"io/ioutil"
+	"os"
 	"time"
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
+	"github.com/docker/docker/api/types/network"
 	volumeType "github.com/docker/docker/api/types/volume"
 	"github.com/docker/docker/client"
+	"github.com/docker/docker/pkg/archive"
 	"github.com/docker/go-connections/nat"
 )
 
@@ -30,6 +34,101 @@ type dbContainerConfig struct {
 	name  string
 	image string
 	port  string
+}
+
+func (c ContainerController) CreateNewApplicationFromRepo(creatorID int, name, path, language string, envs [][]string) (string, error) {
+	//check if the language is supported
+	var found bool
+	for _, l := range Langs {
+		if l == language {
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		return "", fmt.Errorf("language %s not supported, the supported langs are: %v", language, Langs)
+	}
+
+	//get the dockerfile
+	dockerfile, err := ioutil.ReadFile(fmt.Sprintf("dockerfiles/%s.dockerfile", language))
+	if err != nil {
+		return "", err
+	}
+
+	//set the env variables in a string with syntax
+	//ENV key value
+	var envString string
+	if envs != nil {
+		for _, e := range envs {
+			if len(e) != 2 {
+				return "", fmt.Errorf("invalid env %v, the len of the environment must be 2", e)
+			}
+			envString += fmt.Sprintf("ENV %s %s ", e[0], e[1])
+		}
+	}
+
+	//get a random open port
+	randomPort, err := getFreePort()
+	if err != nil {
+		return "", err
+	}
+
+	//create the dockerfile
+	dockerfileWithEnvs := fmt.Sprintf(string(dockerfile), name, path, randomPort, envString)
+	//set a random name for the dockerfile
+	dockerName := "ipaas-dockerfile_" + generateRandomString(10)
+
+	//create and write the propretary dockerfile to the repo
+	f, err := os.Create(path + "/" + dockerName)
+	if err != nil {
+		panic(err)
+	}
+	f.WriteString(dockerfileWithEnvs)
+	f.Close()
+
+	//create a build context, is a tar with the temp repo,
+	//needed since we are not using the filesystem as a context
+	buildContext, err := archive.TarWithOptions(path, &archive.TarOptions{
+		NoLchown: true,
+	})
+	defer buildContext.Close()
+	if err != nil {
+		return "", err
+	}
+
+	//create the image from the dockerfile
+	//we are setting some default labels and the flag -rm -f
+	//!should set memory and cpu limit
+	resp, err := c.cli.ImageBuild(c.ctx, buildContext, types.ImageBuildOptions{
+		Dockerfile: dockerName,
+		//Squash: true,
+		Tags: []string{fmt.Sprintf("%d-%s-%s", creatorID, name, language)},
+		Labels: map[string]string{
+			"creator": fmt.Sprintf("%d", creatorID),
+			"lang":    language,
+			"name":    name,
+		},
+		// Remove:      true,
+		// ForceRemove: true,
+	})
+	if err != nil {
+		return "", err
+	}
+
+	//read the resp.Body to get the id of the image
+	defer resp.Body.Close()
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+
+	fmt.Println("body:", string(body))
+	return "", nil
+
+	//create the container
+	// resp, err := c.cli.ContainerCreate(c.ctx, &container.Config{
+	// 	Image: name,
 }
 
 //create a new database container given the db type, image, port, enviroment variables and volume
@@ -88,9 +187,17 @@ func (c ContainerController) CreateNewDB(conf dbContainerConfig, env []string) (
 		// },
 	}
 
+	networkConf := &network.NetworkingConfig{
+		EndpointsConfig: map[string]*network.EndpointSettings{
+			"ipaas-network": {
+				NetworkID: "cf8bc28f9dcd413ece744e799e24c9be15cecae17e8225dc7e3b25db97644e10",
+			},
+		},
+	}
+
 	//create the container
 	//!set a name to identify the container (<student-name>.<registration_number>-<db-name>)
-	resp, err := c.cli.ContainerCreate(c.ctx, config, hostConfig, nil, nil, "")
+	resp, err := c.cli.ContainerCreate(c.ctx, config, hostConfig, networkConf, nil, "")
 	if err != nil {
 		return "", err
 	}
