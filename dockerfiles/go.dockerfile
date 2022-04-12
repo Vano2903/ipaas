@@ -1,0 +1,17 @@
+FROM golang:1.18.0-alpine3.15
+
+ENV IPAAS_APP_NAME %s
+ENV IPAAS_REPO %s
+ENV IPAAS_PORT %d
+
+%s
+
+EXPOSE $IPAAS_PORT
+
+WORKDIR /go/src/$IPAAS_APP_NAME
+
+COPY . .
+RUN go mod download
+RUN go build -o $IPAAS_APP_NAME
+
+CMD ./$IPAAS_APP_NAME
