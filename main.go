@@ -34,7 +34,7 @@ func main() {
 
 	//application router, it's the main part of the application
 	appRouter := userAreaRouter.PathPrefix("/app").Subrouter()
-	// appRouter.HandleFunc("/new", handler.NewAppHandler)
+	appRouter.HandleFunc("/new", handler.NewApplicationHandler).Methods("POST")
 	appRouter.HandleFunc("/delete/{containerID}", handler.DeleteApplicationHandler).Methods("DELETE")
 
 	server := &http.Server{
