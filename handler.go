@@ -14,6 +14,12 @@ import (
 	resp "github.com/vano2903/ipaas/responser"
 )
 
+type Post struct {
+	GithubRepoUrl string `json:"github-repo"`
+	GithubBranch  string `json:"github-branch"`
+	Language      string `json:"language"`
+}
+
 type Handler struct {
 	cc   *ContainerController
 	sess *sessions.CookieStore
@@ -164,6 +170,60 @@ func (h Handler) NewDBHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 //!===========================APPLICATIONS RELATED HANDLERS
+
+func (h Handler) NewApplicationHandler(w http.ResponseWriter, r *http.Request) {
+	//connect to the db
+	conn, err := connectToDB()
+	if err != nil {
+		resp.Errorf(w, http.StatusInternalServerError, "error connecting to the database: %v", err.Error())
+		return
+	}
+	defer conn.Close()
+	//get the student from the cookies
+	student, err := h.util.GetUserFromCookie(r, conn)
+	if err != nil {
+		resp.Errorf(w, http.StatusInternalServerError, "error getting the user from cookies: %v", err.Error())
+		return
+	}
+
+	//read post body
+	var appPost Post
+	err = json.NewDecoder(r.Body).Decode(&appPost)
+	if err != nil {
+		resp.Errorf(w, http.StatusBadRequest, "error decoding the json: %v", err.Error())
+		return
+	}
+
+	//check that the appPost.GithubRepo is an actual url
+	if !h.util.ValidGithubUrl(appPost.GithubRepoUrl) {
+		resp.Error(w, http.StatusBadRequest, "Invalid github repo url")
+		return
+	}
+
+	//download the repo
+	// repo, name, err := h.util.DownloadGithubRepo(student.ID, appPost.GithubBranch, appPost.GithubRepoUrl)
+	// if err != nil {
+	// 	resp.Errorf(w, http.StatusInternalServerError, "error downloading the repo, try again in one minute: %v", err.Error())
+	// 	return
+	// }
+
+	// fmt.Println("repo:", repo)
+	// fmt.Println("name:", name)
+
+	repo := "tmp/18008-teacher"
+	name := "teacher"
+
+	//create the container
+	id, err := h.cc.CreateNewApplicationFromRepo(student.ID, name, repo, "go", nil)
+	if err != nil {
+		resp.Errorf(w, http.StatusInternalServerError, "error creating the container: %v", err.Error())
+		return
+	}
+
+	fmt.Println("id: ", id)
+
+	resp.Successf(w, http.StatusOK, "Repo downloaded %s", repo)
+}
 
 //delete a container given the container id, it will check if the user owns this application
 func (h Handler) DeleteApplicationHandler(w http.ResponseWriter, r *http.Request) {
@@ -464,7 +524,6 @@ func (h Handler) LoginHandler(w http.ResponseWriter, r *http.Request) {
 
 //generate a new token pair from the refresh token saved in the cookies
 func (h Handler) NewTokenPairFromRefreshTokenHandler(w http.ResponseWriter, r *http.Request) {
-
 	//get the refresh token from the cookie
 	cookie, err := r.Cookie("refreshToken")
 	if err != nil {
