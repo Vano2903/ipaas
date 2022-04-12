@@ -11,6 +11,7 @@ var (
 	privateKey *rsa.PrivateKey
 	publicKey  *rsa.PublicKey
 	handler    *Handler
+	Langs      []string
 )
 
 func init() {
@@ -35,6 +36,8 @@ func init() {
 		panic(err)
 	}
 	publicKey = &privateKey.PublicKey
+
+	Langs = []string{"go", "rust", "php", "python", "java", "c#"}
 
 	handler, err = NewHandler()
 	if err != nil {
