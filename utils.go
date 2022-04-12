@@ -4,10 +4,13 @@ import (
 	"database/sql"
 	"fmt"
 	"math/rand"
+	"net"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
+	"github.com/go-git/go-git/v5"
 	_ "github.com/go-sql-driver/mysql"
 )
 
@@ -45,6 +48,48 @@ func (u Util) GetUserFromCookie(r *http.Request, connection *sql.DB) (Student, e
 	}
 
 	return s, nil
+}
+
+func (u Util) ValidGithubUrl(url string) bool {
+	if !strings.HasPrefix(url, "https://github.com/") {
+		return false
+	}
+
+	if !strings.HasSuffix(url, ".git") {
+		return false
+	}
+
+	return true
+}
+
+func (u Util) DownloadGithubRepo(userID int, branch, url string) (string, string, error) {
+	//get the name of the repo
+	fmt.Print("getting repo name...")
+	repoName := strings.Split(strings.Replace(url, ".git", "", -1), "/")[len(strings.Split(strings.Replace(url, ".git", "", -1), "/"))-1]
+	fmt.Println("ok, repo name:", repoName)
+
+	//get the repo name
+	fmt.Printf("downloading repo in ./tmp/%d-%s...", userID, repoName)
+	_, err := git.PlainClone(fmt.Sprintf("./tmp/%d-%s", userID, repoName), false, &git.CloneOptions{
+		URL:          url,
+		Depth:        1,
+		SingleBranch: true,
+		// ReferenceName: plumbing.ReferenceName(branch),
+		// Progress: os.Stdout,
+	})
+	if err != nil {
+		return "", "", err
+	}
+	fmt.Println("ok")
+
+	//remove the .git folder
+	fmt.Print("removing .git...")
+	if err := os.RemoveAll(fmt.Sprintf("./tmp/%d-%s/.git", userID, repoName)); err != nil {
+		return "", "", err
+	}
+
+	fmt.Println("ok")
+	return fmt.Sprintf("./tmp/%d-%s", userID, repoName), repoName, nil
 }
 
 //generate a new pointer to the util struct
@@ -89,4 +134,24 @@ func generateRandomString(size int) string {
 		inRune[i], inRune[j] = inRune[j], inRune[i]
 	})
 	return string(inRune)
+}
+
+//return a random open port on the host
+func getFreePort() (int, error) {
+	//:0 is the kernel port to get a free port
+	//we are asking for a random open port
+	addr, err := net.ResolveTCPAddr("tcp", "127.0.0.1:0")
+	if err != nil {
+		return 0, err
+	}
+
+	//listen to the port
+	l, err := net.ListenTCP("tcp", addr)
+	if err != nil {
+		return 0, err
+	}
+	//close the connection
+	defer l.Close()
+	//get the port on which the kernel gave us
+	return l.Addr().(*net.TCPAddr).Port, nil
 }
