@@ -36,7 +36,7 @@ type dbContainerConfig struct {
 	port  string
 }
 
-func (c ContainerController) CreateNewApplicationFromRepo(creatorID int, name, path, language string, envs [][]string) (string, error) {
+func (c ContainerController) CreateNewApplicationFromRepo(creatorID int, port, name, path, language string, envs [][]string) (string, error) {
 	//check if the language is supported
 	var found bool
 	for _, l := range Langs {
@@ -69,13 +69,13 @@ func (c ContainerController) CreateNewApplicationFromRepo(creatorID int, name, p
 	}
 
 	//get a random open port
-	randomPort, err := getFreePort()
-	if err != nil {
-		return "", err
-	}
+	// randomPort, err := getFreePort()
+	// if err != nil {
+	// 	return "", err
+	// }
 
 	//create the dockerfile
-	dockerfileWithEnvs := fmt.Sprintf(string(dockerfile), name, path, randomPort, envString)
+	dockerfileWithEnvs := fmt.Sprintf(string(dockerfile), name, path, envString)
 	//set a random name for the dockerfile
 	dockerName := "ipaas-dockerfile_" + generateRandomString(10)
 
@@ -124,11 +124,60 @@ func (c ContainerController) CreateNewApplicationFromRepo(creatorID int, name, p
 	}
 
 	fmt.Println("body:", string(body))
-	return "", nil
+	// return "", nil
+
+	hostBinding := nat.PortBinding{
+		HostIP: "0.0.0.0",
+		//HostPort is the port that the host will listen to, since it's not set
+		//the docker engine will assign a random open port
+		// HostPort: "8080",
+	}
+
+	//set the port for the container (internal one)
+	containerPort, err := nat.NewPort("tcp", port)
+	fmt.Println("container port" + containerPort)
+	if err != nil {
+		return "", err
+	}
+
+	//set a slice of possible port bindings
+	//since it's a db container we need just one
+	portBinding := nat.PortMap{containerPort: []nat.PortBinding{hostBinding}}
+
+	//set the configuration of the host
+	//set the port bindings and the restart policy
+	//!choose a restart policy
+	hostConfig := &container.HostConfig{
+		PortBindings: portBinding,
+		RestartPolicy: container.RestartPolicy{
+			Name:              "on-failure",
+			MaximumRetryCount: 3,
+		},
+		// Mounts: []mount.Mount{
+		// 	{
+		// 		Type:   "volume",
+		// 		Source: volumePath,
+		// 		Target: "/var/lib/mysql",
+		// 	},
+		// },
+	}
 
 	//create the container
-	// resp, err := c.cli.ContainerCreate(c.ctx, &container.Config{
-	// 	Image: name,
+	containerBody, err := c.cli.ContainerCreate(c.ctx, &container.Config{
+		Image: fmt.Sprintf("%d-%s-%s", creatorID, name, language),
+	}, hostConfig, nil, nil, fmt.Sprintf("%d-%s-%s", creatorID, name, language))
+	if err != nil {
+		return "", err
+	}
+	fmt.Println("container id:", containerBody.ID)
+
+	if err := c.cli.ContainerStart(c.ctx, containerBody.ID, types.ContainerStartOptions{}); err != nil {
+		return "", err
+	}
+
+	fmt.Println("started")
+
+	return containerBody.ID, nil
 }
 
 //create a new database container given the db type, image, port, enviroment variables and volume
@@ -160,7 +209,7 @@ func (c ContainerController) CreateNewDB(conf dbContainerConfig, env []string) (
 	//set the port for the container (internal one)
 
 	containerPort, err := nat.NewPort("tcp", conf.port)
-	fmt.Println("container port", containerPort)
+	fmt.Println("container port" + containerPort)
 	if err != nil {
 		return "", err
 	}
@@ -316,6 +365,32 @@ func (c *ContainerController) DeleteContainer(containerID string) error {
 	return c.cli.ContainerRemove(c.ctx, containerID, types.ContainerRemoveOptions{
 		Force: true,
 	})
+}
+
+func (c *ContainerController) GetContainerLogs(containerID string) (string, error) {
+	reader, err := c.cli.ContainerLogs(c.ctx, containerID, types.ContainerLogsOptions{
+		ShowStdout: true,
+		ShowStderr: true,
+		Follow:     true,
+		Tail:       "all",
+	})
+	if err != nil {
+		return "", err
+	}
+	defer reader.Close()
+	logs, err := ioutil.ReadAll(reader)
+	if err != nil {
+		return "", err
+	}
+	return string(logs), nil
+}
+
+func (c *ContainerController) GetContainerStatus(id string) (string, error) {
+	container, err := c.cli.ContainerInspect(c.ctx, id)
+	if err != nil {
+		return "", err
+	}
+	return container.State.Status, nil
 }
 
 //create a new controller
