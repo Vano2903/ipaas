@@ -18,6 +18,7 @@ type Post struct {
 	GithubRepoUrl string `json:"github-repo"`
 	GithubBranch  string `json:"github-branch"`
 	Language      string `json:"language"`
+	Port          string `json:"port"`
 }
 
 type Handler struct {
@@ -201,28 +202,56 @@ func (h Handler) NewApplicationHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	//download the repo
-	// repo, name, err := h.util.DownloadGithubRepo(student.ID, appPost.GithubBranch, appPost.GithubRepoUrl)
-	// if err != nil {
-	// 	resp.Errorf(w, http.StatusInternalServerError, "error downloading the repo, try again in one minute: %v", err.Error())
-	// 	return
-	// }
+	repo, name, err := h.util.DownloadGithubRepo(student.ID, appPost.GithubBranch, appPost.GithubRepoUrl)
+	if err != nil {
+		resp.Errorf(w, http.StatusInternalServerError, "error downloading the repo, try again in one minute: %v", err.Error())
+		return
+	}
 
 	// fmt.Println("repo:", repo)
 	// fmt.Println("name:", name)
 
-	repo := "tmp/18008-teacher"
-	name := "teacher"
+	// repo := "tmp/18008-teacher"
+	// name := "teacher"
 
 	//create the container
-	id, err := h.cc.CreateNewApplicationFromRepo(student.ID, name, repo, "go", nil)
+	id, err := h.cc.CreateNewApplicationFromRepo(student.ID, appPost.Port, name, repo, appPost.Language, nil)
 	if err != nil {
 		resp.Errorf(w, http.StatusInternalServerError, "error creating the container: %v", err.Error())
 		return
 	}
 
+	err = os.RemoveAll(repo)
+	if err != nil {
+		resp.Errorf(w, http.StatusInternalServerError, "error removing the repo: %v", err)
+		return
+	}
+
 	fmt.Println("id: ", id)
 
-	resp.Successf(w, http.StatusOK, "Repo downloaded %s", repo)
+	exernalPort, err := h.cc.GetContainerExternalPort(id, appPost.Port)
+	if err != nil {
+		resp.Errorf(w, http.StatusInternalServerError, "error getting the external port: %v", err.Error())
+		return
+	}
+
+	//get the status of the application
+	status, err := h.cc.GetContainerStatus(id)
+	if err != nil {
+		resp.Errorf(w, http.StatusInternalServerError, "error getting the status of the container: %v", err.Error())
+		return
+	}
+
+	toSend := map[string]interface{}{
+		"container id":  id,
+		"external port": exernalPort,
+		"status":        status,
+	}
+
+	logs, _ := h.cc.GetContainerLogs(id)
+	fmt.Println("logs: ", logs)
+
+	resp.SuccessParse(w, http.StatusOK, "application created", toSend)
 }
 
 //delete a container given the container id, it will check if the user owns this application
