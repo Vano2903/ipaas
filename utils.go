@@ -155,3 +155,6 @@ func getFreePort() (int, error) {
 	//get the port on which the kernel gave us
 	return l.Addr().(*net.TCPAddr).Port, nil
 }
+
+//remove all continers excet the ipaas db:
+//docker rm $(docker ps -a | grep -v "ipaas_db_1" | awk 'NR>1 {print $1}')
