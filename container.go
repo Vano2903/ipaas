@@ -10,7 +10,6 @@ import (
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
-	"github.com/docker/docker/api/types/network"
 	volumeType "github.com/docker/docker/api/types/volume"
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/archive"
@@ -36,7 +35,9 @@ type dbContainerConfig struct {
 	port  string
 }
 
-func (c ContainerController) CreateNewApplicationFromRepo(creatorID int, port, name, path, language string, envs [][]string) (string, error) {
+//given the creator id, name of the app, path for the tmp file, lang for the dockerfile and envs
+//it will return the image name and a possible error
+func (c ContainerController) CreateImage(creatorID int, name, path, language string, envs [][]string) (string, error) {
 	//check if the language is supported
 	var found bool
 	for _, l := range Langs {
@@ -46,6 +47,7 @@ func (c ContainerController) CreateNewApplicationFromRepo(creatorID int, port, n
 		}
 	}
 
+	//check if it's found
 	if !found {
 		return "", fmt.Errorf("language %s not supported, the supported langs are: %v", language, Langs)
 	}
@@ -68,12 +70,6 @@ func (c ContainerController) CreateNewApplicationFromRepo(creatorID int, port, n
 		}
 	}
 
-	//get a random open port
-	// randomPort, err := getFreePort()
-	// if err != nil {
-	// 	return "", err
-	// }
-
 	//create the dockerfile
 	dockerfileWithEnvs := fmt.Sprintf(string(dockerfile), name, path, envString)
 	//set a random name for the dockerfile
@@ -82,7 +78,7 @@ func (c ContainerController) CreateNewApplicationFromRepo(creatorID int, port, n
 	//create and write the propretary dockerfile to the repo
 	f, err := os.Create(path + "/" + dockerName)
 	if err != nil {
-		panic(err)
+		return "", err
 	}
 	f.WriteString(dockerfileWithEnvs)
 	f.Close()
@@ -97,46 +93,65 @@ func (c ContainerController) CreateNewApplicationFromRepo(creatorID int, port, n
 		return "", err
 	}
 
+	//create the name for the image <creatorID>-<name>-<language>
+	imageName := []string{fmt.Sprintf("%d-%s-%s", creatorID, name, language)}
+
 	//create the image from the dockerfile
 	//we are setting some default labels and the flag -rm -f
 	//!should set memory and cpu limit
 	resp, err := c.cli.ImageBuild(c.ctx, buildContext, types.ImageBuildOptions{
 		Dockerfile: dockerName,
 		//Squash: true,
-		Tags: []string{fmt.Sprintf("%d-%s-%s", creatorID, name, language)},
+		Tags: imageName,
 		Labels: map[string]string{
 			"creator": fmt.Sprintf("%d", creatorID),
 			"lang":    language,
 			"name":    name,
 		},
-		// Remove:      true,
-		// ForceRemove: true,
+		Remove:      true,
+		ForceRemove: true,
 	})
 	if err != nil {
 		return "", err
 	}
 
-	//read the resp.Body to get the id of the image
-	defer resp.Body.Close()
+	// //read the resp.Body to get the id of the image
 	body, err := ioutil.ReadAll(resp.Body)
+	resp.Body.Close()
 	if err != nil {
 		return "", err
 	}
 
 	fmt.Println("body:", string(body))
-	// return "", nil
+	// // return "", nil
 
+	return imageName[0], nil
+}
+
+func (c ContainerController) CreateNewApplicationFromRepo(creatorID int, port, name, language, imageName string) (string, error) {
+	//generic configs for the container
+	containerConfig := &container.Config{
+		Image: imageName,
+	}
+
+	// externalPort, err := getFreePort()
+	// if err != nil {
+	// 	return "", err
+	// }
+
+	//host bindings config, hostPort is not set cause the engine will assign a dinamyc one
 	hostBinding := nat.PortBinding{
 		HostIP: "0.0.0.0",
 		//HostPort is the port that the host will listen to, since it's not set
 		//the docker engine will assign a random open port
-		// HostPort: "8080",
+		// HostPort: strconv.Itoa(externalPort),
 	}
 
 	//set the port for the container (internal one)
 	containerPort, err := nat.NewPort("tcp", port)
-	fmt.Println("container port" + containerPort)
+	fmt.Println("container port", containerPort)
 	if err != nil {
+		fmt.Println("error container port")
 		return "", err
 	}
 
@@ -163,23 +178,23 @@ func (c ContainerController) CreateNewApplicationFromRepo(creatorID int, port, n
 	}
 
 	//create the container
-	containerBody, err := c.cli.ContainerCreate(c.ctx, &container.Config{
-		Image: fmt.Sprintf("%d-%s-%s", creatorID, name, language),
-	}, hostConfig, nil, nil, fmt.Sprintf("%d-%s-%s", creatorID, name, language))
+	containerBody, err := c.cli.ContainerCreate(c.ctx, containerConfig,
+		hostConfig, nil, nil, fmt.Sprintf("%d-%s-%s", creatorID, name, language))
+
 	if err != nil {
 		return "", err
 	}
-	fmt.Println("container id:", containerBody.ID)
 
 	if err := c.cli.ContainerStart(c.ctx, containerBody.ID, types.ContainerStartOptions{}); err != nil {
 		return "", err
 	}
 
-	fmt.Println("started")
+	// fmt.Println("started")
 
 	return containerBody.ID, nil
 }
 
+//TODO: ADD DB NAME
 //create a new database container given the db type, image, port, enviroment variables and volume
 //it returns the container id and an error
 func (c ContainerController) CreateNewDB(conf dbContainerConfig, env []string) (string, error) {
@@ -236,17 +251,17 @@ func (c ContainerController) CreateNewDB(conf dbContainerConfig, env []string) (
 		// },
 	}
 
-	networkConf := &network.NetworkingConfig{
-		EndpointsConfig: map[string]*network.EndpointSettings{
-			"ipaas-network": {
-				NetworkID: "cf8bc28f9dcd413ece744e799e24c9be15cecae17e8225dc7e3b25db97644e10",
-			},
-		},
-	}
+	// networkConf := &network.NetworkingConfig{
+	// 	EndpointsConfig: map[string]*network.EndpointSettings{
+	// 		"ipaas-network": {
+	// 			NetworkID: "cf8bc28f9dcd413ece744e799e24c9be15cecae17e8225dc7e3b25db97644e10",
+	// 		},
+	// 	},
+	// }
 
 	//create the container
 	//!set a name to identify the container (<student-name>.<registration_number>-<db-name>)
-	resp, err := c.cli.ContainerCreate(c.ctx, config, hostConfig, networkConf, nil, "")
+	resp, err := c.cli.ContainerCreate(c.ctx, config, hostConfig, nil, nil, "")
 	if err != nil {
 		return "", err
 	}
