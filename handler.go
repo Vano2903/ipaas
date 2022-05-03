@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -214,7 +215,13 @@ func (h Handler) NewApplicationHandler(w http.ResponseWriter, r *http.Request) {
 	repo := "tmp/18008-nomi"
 	name := "nomi"
 
-	imageName, err := h.cc.CreateImage(student.ID, name, repo, appPost.Language, nil)
+	port, err := strconv.Atoi(appPost.Port)
+	if err != nil {
+		resp.Errorf(w, http.StatusBadRequest, "error converting the port to an int: %v", err.Error())
+		return
+	}
+
+	imageName, err := h.cc.CreateImage(student.ID, port, name, repo, appPost.Language, nil)
 	if err != nil {
 		resp.Errorf(w, http.StatusInternalServerError, "error creating the image: %v", err.Error())
 		return
