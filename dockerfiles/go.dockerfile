@@ -12,4 +12,6 @@ COPY . .
 RUN go mod download
 RUN go build -o $IPAAS_APP_NAME
 
+EXPOSE %d
+
 CMD ./$IPAAS_APP_NAME
