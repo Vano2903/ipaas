@@ -35,9 +35,9 @@ type dbContainerConfig struct {
 	port  string
 }
 
-//given the creator id, name of the app, path for the tmp file, lang for the dockerfile and envs
+//given the creator id, port to expose (in the docker), name of the app, path for the tmp file, lang for the dockerfile and envs
 //it will return the image name and a possible error
-func (c ContainerController) CreateImage(creatorID int, name, path, language string, envs [][]string) (string, error) {
+func (c ContainerController) CreateImage(creatorID, port int, name, path, language string, envs [][]string) (string, error) {
 	//check if the language is supported
 	var found bool
 	for _, l := range Langs {
@@ -71,7 +71,7 @@ func (c ContainerController) CreateImage(creatorID int, name, path, language str
 	}
 
 	//create the dockerfile
-	dockerfileWithEnvs := fmt.Sprintf(string(dockerfile), name, path, envString)
+	dockerfileWithEnvs := fmt.Sprintf(string(dockerfile), name, path, envString, port)
 	//set a random name for the dockerfile
 	dockerName := "ipaas-dockerfile_" + generateRandomString(10)
 
@@ -128,6 +128,7 @@ func (c ContainerController) CreateImage(creatorID int, name, path, language str
 	return imageName[0], nil
 }
 
+//create a container from an image which is the one created from a student's repository
 func (c ContainerController) CreateNewApplicationFromRepo(creatorID int, port, name, language, imageName string) (string, error) {
 	//generic configs for the container
 	containerConfig := &container.Config{
@@ -149,9 +150,7 @@ func (c ContainerController) CreateNewApplicationFromRepo(creatorID int, port, n
 
 	//set the port for the container (internal one)
 	containerPort, err := nat.NewPort("tcp", port)
-	fmt.Println("container port", containerPort)
 	if err != nil {
-		fmt.Println("error container port")
 		return "", err
 	}
 
@@ -177,10 +176,17 @@ func (c ContainerController) CreateNewApplicationFromRepo(creatorID int, port, n
 		// },
 	}
 
+	// networkConf := &network.NetworkingConfig{
+	// 	EndpointsConfig: map[string]*network.EndpointSettings{
+	// 		"ipaas-network": {
+	// 			NetworkID: "05744f2ea0ccf4883431463934bd3560a129f273a14fc7082b51ceca63a76efd",
+	// 		},
+	// 	},
+	// }
+
 	//create the container
 	containerBody, err := c.cli.ContainerCreate(c.ctx, containerConfig,
 		hostConfig, nil, nil, fmt.Sprintf("%d-%s-%s", creatorID, name, language))
-
 	if err != nil {
 		return "", err
 	}
