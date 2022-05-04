@@ -181,6 +181,7 @@ func (h Handler) NewApplicationHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer conn.Close()
+
 	//get the student from the cookies
 	student, err := h.util.GetUserFromCookie(r, conn)
 	if err != nil {
@@ -203,70 +204,73 @@ func (h Handler) NewApplicationHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	//download the repo
-	// repo, name, err := h.util.DownloadGithubRepo(student.ID, appPost.GithubBranch, appPost.GithubRepoUrl)
-	// if err != nil {
-	// 	resp.Errorf(w, http.StatusInternalServerError, "error downloading the repo, try again in one minute: %v", err.Error())
-	// 	return
-	// }
+	repo, name, err := h.util.DownloadGithubRepo(student.ID, appPost.GithubBranch, appPost.GithubRepoUrl)
+	if err != nil {
+		resp.Errorf(w, http.StatusInternalServerError, "error downloading the repo, try again in one minute: %v", err.Error())
+		return
+	}
 
 	// fmt.Println("repo:", repo)
 	// fmt.Println("name:", name)
 
-	repo := "tmp/18008-nomi"
-	name := "nomi"
+	// repo := "tmp/18008-nomi"
+	// name := "nomi"
 
+	//port to expose for the app
 	port, err := strconv.Atoi(appPost.Port)
 	if err != nil {
 		resp.Errorf(w, http.StatusBadRequest, "error converting the port to an int: %v", err.Error())
 		return
 	}
 
-	imageName, err := h.cc.CreateImage(student.ID, port, name, repo, appPost.Language, nil)
+	//create the image from the repo downloaded
+	imageName, imageID, err := h.cc.CreateImage(student.ID, port, name, repo, appPost.Language, nil)
 	if err != nil {
 		resp.Errorf(w, http.StatusInternalServerError, "error creating the image: %v", err.Error())
 		return
 	}
 
-	fmt.Println("image name: ", imageName)
-
-	//create the container
+	//create the container from the image just created
 	id, err := h.cc.CreateNewApplicationFromRepo(student.ID, appPost.Port, name, appPost.Language, imageName)
 	if err != nil {
 		resp.Errorf(w, http.StatusInternalServerError, "error creating the container: %v", err.Error())
 		return
 	}
 
-	// err = os.RemoveAll(repo)
-	// if err != nil {
-	// 	resp.Errorf(w, http.StatusInternalServerError, "error removing the repo: %v", err)
-	// 	return
-	// }
+	//remove the image created
+	err = h.cc.RemoveImage(imageID)
 
-	fmt.Println("id: ", id)
-	resp.Success(w, http.StatusOK, "image id: "+id)
-	// exernalPort, err := h.cc.GetContainerExternalPort(id, appPost.Port)
-	// if err != nil {
-	// 	resp.Errorf(w, http.StatusInternalServerError, "error getting the external port: %v", err.Error())
-	// 	return
-	// }
+	//remove the repo after creating the application
+	err = os.RemoveAll(repo)
+	if err != nil {
+		resp.Errorf(w, http.StatusInternalServerError, "error removing the repo: %v", err)
+		return
+	}
 
-	// //get the status of the application
-	// status, err := h.cc.GetContainerStatus(id)
-	// if err != nil {
-	// 	resp.Errorf(w, http.StatusInternalServerError, "error getting the status of the container: %v", err.Error())
-	// 	return
-	// }
+	exernalPort, err := h.cc.GetContainerExternalPort(id, appPost.Port)
+	if err != nil {
+		resp.Errorf(w, http.StatusInternalServerError, "error getting the external port: %v", err.Error())
+		return
+	}
 
-	// toSend := map[string]interface{}{
-	// 	"container id":  id,
-	// 	"external port": exernalPort,
-	// 	"status":        status,
-	// }
+	//get the status of the application
+	status, err := h.cc.GetContainerStatus(id)
+	if err != nil {
+		resp.Errorf(w, http.StatusInternalServerError, "error getting the status of the container: %v", err.Error())
+		return
+	}
+	fmt.Println("status:", status)
+
+	toSend := map[string]interface{}{
+		"container id":  id,
+		"external port": exernalPort,
+		"status":        status,
+	}
 
 	// logs, _ := h.cc.GetContainerLogs(id)
 	// fmt.Println("logs: ", logs)
 
-	// resp.SuccessParse(w, http.StatusOK, "application created", toSend)
+	resp.SuccessParse(w, http.StatusOK, "application created", toSend)
 }
 
 //delete a container given the container id, it will check if the user owns this application
