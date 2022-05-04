@@ -204,17 +204,17 @@ func (h Handler) NewApplicationHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	//download the repo
-	repo, name, err := h.util.DownloadGithubRepo(student.ID, appPost.GithubBranch, appPost.GithubRepoUrl)
-	if err != nil {
-		resp.Errorf(w, http.StatusInternalServerError, "error downloading the repo, try again in one minute: %v", err.Error())
-		return
-	}
+	// repo, name, err := h.util.DownloadGithubRepo(student.ID, appPost.GithubBranch, appPost.GithubRepoUrl)
+	// if err != nil {
+	// 	resp.Errorf(w, http.StatusInternalServerError, "error downloading the repo, try again in one minute: %v", err.Error())
+	// 	return
+	// }
 
 	// fmt.Println("repo:", repo)
 	// fmt.Println("name:", name)
 
-	// repo := "tmp/18008-nomi"
-	// name := "nomi"
+	repo := "tmp/18008-testing"
+	name := "testing"
 
 	//port to expose for the app
 	port, err := strconv.Atoi(appPost.Port)
@@ -230,6 +230,9 @@ func (h Handler) NewApplicationHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	fmt.Println("name:", imageName)
+	fmt.Println("id:", imageID)
+
 	//create the container from the image just created
 	id, err := h.cc.CreateNewApplicationFromRepo(student.ID, appPost.Port, name, appPost.Language, imageName)
 	if err != nil {
@@ -241,11 +244,11 @@ func (h Handler) NewApplicationHandler(w http.ResponseWriter, r *http.Request) {
 	err = h.cc.RemoveImage(imageID)
 
 	//remove the repo after creating the application
-	err = os.RemoveAll(repo)
-	if err != nil {
-		resp.Errorf(w, http.StatusInternalServerError, "error removing the repo: %v", err)
-		return
-	}
+	// err = os.RemoveAll(repo)
+	// if err != nil {
+	// 	resp.Errorf(w, http.StatusInternalServerError, "error removing the repo: %v", err)
+	// 	return
+	// }
 
 	exernalPort, err := h.cc.GetContainerExternalPort(id, appPost.Port)
 	if err != nil {
