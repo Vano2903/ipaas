@@ -1,10 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io/ioutil"
 	"os"
+	"os/exec"
 	"time"
 
 	"github.com/docker/docker/api/types"
@@ -36,8 +38,8 @@ type dbContainerConfig struct {
 }
 
 //given the creator id, port to expose (in the docker), name of the app, path for the tmp file, lang for the dockerfile and envs
-//it will return the image name and a possible error
-func (c ContainerController) CreateImage(creatorID, port int, name, path, language string, envs [][]string) (string, error) {
+//it will return the image name, image id and a possible error
+func (c ContainerController) CreateImage(creatorID, port int, name, path, language string, envs [][]string) (string, string, error) {
 	//check if the language is supported
 	var found bool
 	for _, l := range Langs {
@@ -49,13 +51,13 @@ func (c ContainerController) CreateImage(creatorID, port int, name, path, langua
 
 	//check if it's found
 	if !found {
-		return "", fmt.Errorf("language %s not supported, the supported langs are: %v", language, Langs)
+		return "", "", fmt.Errorf("language %s not supported, the supported langs are: %v", language, Langs)
 	}
 
 	//get the dockerfile
 	dockerfile, err := ioutil.ReadFile(fmt.Sprintf("dockerfiles/%s.dockerfile", language))
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 
 	//set the env variables in a string with syntax
@@ -64,7 +66,7 @@ func (c ContainerController) CreateImage(creatorID, port int, name, path, langua
 	if envs != nil {
 		for _, e := range envs {
 			if len(e) != 2 {
-				return "", fmt.Errorf("invalid env %v, the len of the environment must be 2", e)
+				return "", "", fmt.Errorf("invalid env %v, the len of the environment must be 2", e)
 			}
 			envString += fmt.Sprintf("ENV %s %s ", e[0], e[1])
 		}
@@ -78,7 +80,7 @@ func (c ContainerController) CreateImage(creatorID, port int, name, path, langua
 	//create and write the propretary dockerfile to the repo
 	f, err := os.Create(path + "/" + dockerName)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	f.WriteString(dockerfileWithEnvs)
 	f.Close()
@@ -90,7 +92,7 @@ func (c ContainerController) CreateImage(creatorID, port int, name, path, langua
 	})
 	defer buildContext.Close()
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 
 	//create the name for the image <creatorID>-<name>-<language>
@@ -112,20 +114,35 @@ func (c ContainerController) CreateImage(creatorID, port int, name, path, langua
 		ForceRemove: true,
 	})
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 
-	// //read the resp.Body to get the id of the image
-	body, err := ioutil.ReadAll(resp.Body)
+	//read the resp.Body, its a way to wait for the image to be created
+	_, err = ioutil.ReadAll(resp.Body)
 	resp.Body.Close()
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 
-	fmt.Println("body:", string(body))
-	// // return "", nil
+	//find the id of the image just created
+	var out bytes.Buffer
+	cmd := exec.CommandContext(c.ctx, "docker", "images", "-q", imageName[0])
+	cmd.Stdout = &out
+	err = cmd.Run()
+	if err != nil {
+		return "", "", err
+	}
 
-	return imageName[0], nil
+	return imageName[0], out.String(), nil
+}
+
+//remove an image from the image id
+func (c ContainerController) RemoveImage(imageID string) error {
+	//remove the image
+	_, err := c.cli.ImageRemove(context.Background(), imageID, types.ImageRemoveOptions{
+		Force: true,
+	})
+	return err
 }
 
 //create a container from an image which is the one created from a student's repository
@@ -167,22 +184,7 @@ func (c ContainerController) CreateNewApplicationFromRepo(creatorID int, port, n
 			Name:              "on-failure",
 			MaximumRetryCount: 3,
 		},
-		// Mounts: []mount.Mount{
-		// 	{
-		// 		Type:   "volume",
-		// 		Source: volumePath,
-		// 		Target: "/var/lib/mysql",
-		// 	},
-		// },
 	}
-
-	// networkConf := &network.NetworkingConfig{
-	// 	EndpointsConfig: map[string]*network.EndpointSettings{
-	// 		"ipaas-network": {
-	// 			NetworkID: "05744f2ea0ccf4883431463934bd3560a129f273a14fc7082b51ceca63a76efd",
-	// 		},
-	// 	},
-	// }
 
 	//create the container
 	containerBody, err := c.cli.ContainerCreate(c.ctx, containerConfig,
@@ -194,8 +196,6 @@ func (c ContainerController) CreateNewApplicationFromRepo(creatorID int, port, n
 	if err := c.cli.ContainerStart(c.ctx, containerBody.ID, types.ContainerStartOptions{}); err != nil {
 		return "", err
 	}
-
-	// fmt.Println("started")
 
 	return containerBody.ID, nil
 }
