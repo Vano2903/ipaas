@@ -63,13 +63,11 @@ func (c ContainerController) CreateImage(creatorID, port int, name, path, langua
 	//set the env variables in a string with syntax
 	//ENV key value
 	var envString string
-	if envs != nil {
-		for _, e := range envs {
-			if len(e) != 2 {
-				return "", "", fmt.Errorf("invalid env %v, the len of the environment must be 2", e)
-			}
-			envString += fmt.Sprintf("ENV %s %s ", e[0], e[1])
+	for _, e := range envs {
+		if len(e) != 2 {
+			return "", "", fmt.Errorf("invalid env %v, the len of the environment must be 2", e)
 		}
+		envString += fmt.Sprintf("ENV %s %s ", e[0], e[1])
 	}
 
 	//create the dockerfile
@@ -85,19 +83,22 @@ func (c ContainerController) CreateImage(creatorID, port int, name, path, langua
 	f.WriteString(dockerfileWithEnvs)
 	f.Close()
 
+	fmt.Println("created the dockerfile")
+
 	//create a build context, is a tar with the temp repo,
 	//needed since we are not using the filesystem as a context
 	buildContext, err := archive.TarWithOptions(path, &archive.TarOptions{
 		NoLchown: true,
 	})
-	defer buildContext.Close()
 	if err != nil {
 		return "", "", err
 	}
+	defer buildContext.Close()
+	fmt.Println("build the context:", &buildContext)
 
 	//create the name for the image <creatorID>-<name>-<language>
 	imageName := []string{fmt.Sprintf("%d-%s-%s", creatorID, name, language)}
-
+	fmt.Println("image name:", imageName[0])
 	//create the image from the dockerfile
 	//we are setting some default labels and the flag -rm -f
 	//!should set memory and cpu limit
@@ -118,12 +119,12 @@ func (c ContainerController) CreateImage(creatorID, port int, name, path, langua
 	}
 
 	//read the resp.Body, its a way to wait for the image to be created
-	_, err = ioutil.ReadAll(resp.Body)
+	a, err := ioutil.ReadAll(resp.Body)
 	resp.Body.Close()
 	if err != nil {
 		return "", "", err
 	}
-
+	fmt.Println("body:", string(a))
 	//find the id of the image just created
 	var out bytes.Buffer
 	cmd := exec.CommandContext(c.ctx, "docker", "images", "-q", imageName[0])
