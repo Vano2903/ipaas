@@ -1,4 +1,5 @@
-FROM golang:1.18.0-alpine3.15
+FROM golang:1.18.1-alpine3.15
+RUN apk add git
 
 ENV IPAAS_APP_NAME %s
 ENV IPAAS_REPO %s
