@@ -20,6 +20,7 @@ type Post struct {
 	GithubBranch  string `json:"github-branch"`
 	Language      string `json:"language"`
 	Port          string `json:"port"`
+	Description   string `json:"description,omitempty"`
 }
 
 type Handler struct {
@@ -173,6 +174,7 @@ func (h Handler) NewDBHandler(w http.ResponseWriter, r *http.Request) {
 
 //!===========================APPLICATIONS RELATED HANDLERS
 
+//TODO: should delete the container/image in case of an error because it would stop the user to create again the application
 func (h Handler) NewApplicationHandler(w http.ResponseWriter, r *http.Request) {
 	//connect to the db
 	conn, err := connectToDB()
@@ -204,17 +206,17 @@ func (h Handler) NewApplicationHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	//download the repo
-	// repo, name, err := h.util.DownloadGithubRepo(student.ID, appPost.GithubBranch, appPost.GithubRepoUrl)
-	// if err != nil {
-	// 	resp.Errorf(w, http.StatusInternalServerError, "error downloading the repo, try again in one minute: %v", err.Error())
-	// 	return
-	// }
+	repo, name, err := h.util.DownloadGithubRepo(student.ID, appPost.GithubBranch, appPost.GithubRepoUrl)
+	if err != nil {
+		resp.Errorf(w, http.StatusInternalServerError, "error downloading the repo, try again in one minute: %v", err.Error())
+		return
+	}
 
 	// fmt.Println("repo:", repo)
 	// fmt.Println("name:", name)
 
-	repo := "tmp/18008-testing"
-	name := "testing"
+	// repo := "tmp/18008-testing"
+	// name := "testing"
 
 	//port to expose for the app
 	port, err := strconv.Atoi(appPost.Port)
@@ -244,11 +246,11 @@ func (h Handler) NewApplicationHandler(w http.ResponseWriter, r *http.Request) {
 	err = h.cc.RemoveImage(imageID)
 
 	//remove the repo after creating the application
-	// err = os.RemoveAll(repo)
-	// if err != nil {
-	// 	resp.Errorf(w, http.StatusInternalServerError, "error removing the repo: %v", err)
-	// 	return
-	// }
+	err = os.RemoveAll(repo)
+	if err != nil {
+		resp.Errorf(w, http.StatusInternalServerError, "error removing the repo: %v", err)
+		return
+	}
 
 	exernalPort, err := h.cc.GetContainerExternalPort(id, appPost.Port)
 	if err != nil {
@@ -264,12 +266,23 @@ func (h Handler) NewApplicationHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	fmt.Println("status:", status)
 
-	toSend := map[string]interface{}{
-		"container id":  id,
-		"external port": exernalPort,
-		"status":        status,
+	//add a new database application created by the student (student id)
+	insertApplicationQuery := `
+	INSERT INTO applications (containerID, status, studentID, type, name, description) VALUES (?, ?, ?, ?, ?, ?)
+	`
+
+	//exec the query, the status will be up and type database, the name will follow the nomenclature of <studentID>:<dbType>/<dbName>
+	_, err = conn.Exec(insertApplicationQuery, id, status, student.ID, "web", imageName, appPost.Description)
+	if err != nil {
+		resp.Errorf(w, http.StatusInternalServerError, "unable to link the application to the user: %v", err.Error())
+		return
 	}
 
+	toSend := map[string]interface{}{
+		"container id":  id,
+		"external port": "127.0.0.1:" + exernalPort,
+		"status":        status,
+	}
 	// logs, _ := h.cc.GetContainerLogs(id)
 	// fmt.Println("logs: ", logs)
 
