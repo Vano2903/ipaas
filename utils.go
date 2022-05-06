@@ -50,6 +50,7 @@ func (u Util) GetUserFromCookie(r *http.Request, connection *sql.DB) (Student, e
 	return s, nil
 }
 
+//check if a url is a valid github repo download url (github.com/name/example.git)
 func (u Util) ValidGithubUrl(url string) bool {
 	if !strings.HasPrefix(url, "https://github.com/") {
 		return false
@@ -62,7 +63,10 @@ func (u Util) ValidGithubUrl(url string) bool {
 	return true
 }
 
-func (u Util) DownloadGithubRepo(userID int, branch, url string) (string, string, error) {
+//TODO: branch is not used yet, should be implemented
+//this function clone the repository from github given the url and save it in the tmp folder
+//it returns the name of the path, name and last commit hash and a possible error
+func (u Util) DownloadGithubRepo(userID int, branch, url string) (string, string, string, error) {
 	//get the name of the repo
 	fmt.Print("getting repo name...")
 	repoName := strings.Split(strings.Replace(url, ".git", "", -1), "/")[len(strings.Split(strings.Replace(url, ".git", "", -1), "/"))-1]
@@ -70,7 +74,7 @@ func (u Util) DownloadGithubRepo(userID int, branch, url string) (string, string
 
 	//get the repo name
 	fmt.Printf("downloading repo in ./tmp/%d-%s...", userID, repoName)
-	_, err := git.PlainClone(fmt.Sprintf("./tmp/%d-%s", userID, repoName), false, &git.CloneOptions{
+	r, err := git.PlainClone(fmt.Sprintf("./tmp/%d-%s", userID, repoName), false, &git.CloneOptions{
 		URL:          url,
 		Depth:        1,
 		SingleBranch: true,
@@ -78,18 +82,32 @@ func (u Util) DownloadGithubRepo(userID int, branch, url string) (string, string
 		// Progress: os.Stdout,
 	})
 	if err != nil {
-		return "", "", err
+		return "", "", "", err
+	}
+	fmt.Println("ok")
+
+	logs, err := r.Log(&git.LogOptions{})
+	if err != nil {
+		return "", "", "", err
+	}
+	defer logs.Close()
+
+	//get the last commit hash
+	fmt.Print("getting last commit hash...")
+	commitHash, err := logs.Next()
+	if err != nil {
+		return "", "", "", err
 	}
 	fmt.Println("ok")
 
 	//remove the .git folder
 	fmt.Print("removing .git...")
 	if err := os.RemoveAll(fmt.Sprintf("./tmp/%d-%s/.git", userID, repoName)); err != nil {
-		return "", "", err
+		return "", "", "", err
 	}
 
 	fmt.Println("ok")
-	return fmt.Sprintf("./tmp/%d-%s", userID, repoName), repoName, nil
+	return fmt.Sprintf("./tmp/%d-%s", userID, repoName), repoName, commitHash.Hash.String(), nil
 }
 
 //generate a new pointer to the util struct
