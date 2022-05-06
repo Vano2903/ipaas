@@ -15,14 +15,6 @@ import (
 	resp "github.com/vano2903/ipaas/responser"
 )
 
-type Post struct {
-	GithubRepoUrl string `json:"github-repo"`
-	GithubBranch  string `json:"github-branch"`
-	Language      string `json:"language"`
-	Port          string `json:"port"`
-	Description   string `json:"description,omitempty"`
-}
-
 type Handler struct {
 	cc   *ContainerController
 	sess *sessions.CookieStore
@@ -175,6 +167,11 @@ func (h Handler) NewDBHandler(w http.ResponseWriter, r *http.Request) {
 //!===========================APPLICATIONS RELATED HANDLERS
 
 //TODO: should delete the container/image in case of an error because it would stop the user to create again the application
+//new application handler let the user host a new application given:
+//1) github repository
+//2) programming lang
+//3) port of the program
+//! for now the only supported applications are web based one
 func (h Handler) NewApplicationHandler(w http.ResponseWriter, r *http.Request) {
 	//connect to the db
 	conn, err := connectToDB()
@@ -192,7 +189,7 @@ func (h Handler) NewApplicationHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	//read post body
-	var appPost Post
+	var appPost AppPost
 	err = json.NewDecoder(r.Body).Decode(&appPost)
 	if err != nil {
 		resp.Errorf(w, http.StatusBadRequest, "error decoding the json: %v", err.Error())
@@ -206,7 +203,7 @@ func (h Handler) NewApplicationHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	//download the repo
-	repo, name, err := h.util.DownloadGithubRepo(student.ID, appPost.GithubBranch, appPost.GithubRepoUrl)
+	repo, name, hash, err := h.util.DownloadGithubRepo(student.ID, appPost.GithubBranch, appPost.GithubRepoUrl)
 	if err != nil {
 		resp.Errorf(w, http.StatusInternalServerError, "error downloading the repo, try again in one minute: %v", err.Error())
 		return
@@ -244,6 +241,10 @@ func (h Handler) NewApplicationHandler(w http.ResponseWriter, r *http.Request) {
 
 	//remove the image created
 	err = h.cc.RemoveImage(imageID)
+	if err != nil {
+		resp.Errorf(w, http.StatusInternalServerError, "error removing the image: %v", err.Error())
+		return
+	}
 
 	//remove the repo after creating the application
 	err = os.RemoveAll(repo)
@@ -268,11 +269,11 @@ func (h Handler) NewApplicationHandler(w http.ResponseWriter, r *http.Request) {
 
 	//add a new database application created by the student (student id)
 	insertApplicationQuery := `
-	INSERT INTO applications (containerID, status, studentID, type, name, description) VALUES (?, ?, ?, ?, ?, ?)
+	INSERT INTO applications (containerID, status, studentID, type, name, description, githubRepo, lastCommit) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
 	//exec the query, the status will be up and type database, the name will follow the nomenclature of <studentID>:<dbType>/<dbName>
-	_, err = conn.Exec(insertApplicationQuery, id, status, student.ID, "web", imageName, appPost.Description)
+	_, err = conn.Exec(insertApplicationQuery, id, status, student.ID, "web", imageName, appPost.Description, appPost.GithubRepoUrl, hash)
 	if err != nil {
 		resp.Errorf(w, http.StatusInternalServerError, "unable to link the application to the user: %v", err.Error())
 		return
@@ -335,6 +336,40 @@ func (h Handler) DeleteApplicationHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 	resp.Success(w, http.StatusOK, "container deleted successfully")
+}
+
+func (h Handler) UpdateApplicationHandler(w http.ResponseWriter, r *http.Request) {
+	//get the container from /{containerID}
+	containerID := mux.Vars(r)["containerID"]
+
+	//connect to the db
+	conn, err := connectToDB()
+	if err != nil {
+		resp.Errorf(w, http.StatusInternalServerError, "error connecting to the database: %v", err.Error())
+		return
+	}
+	defer conn.Close()
+
+	//get the student from the cookies
+	student, err := h.util.GetUserFromCookie(r, conn)
+	if err != nil {
+		resp.Errorf(w, http.StatusInternalServerError, "error getting the user from cookies: %v", err.Error())
+		return
+	}
+
+	//get the application from the database and check if it's owned by the student
+	var app Application
+	err = conn.QueryRow(`SELECT * FROM applications WHERE studentID = ? AND containerID = ?`, student.ID, containerID).Scan(&app.ID, &app.ContainerID, &app.Status, &app.StudentID, &app.Type, &app.Name, &app.Description, &app.CreatedAt, &app.IsPublic)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			resp.Errorf(w, http.StatusBadRequest, "application not found, the application might have the wrong container id or you dont own it")
+			return
+		}
+		resp.Errorf(w, http.StatusInternalServerError, "error getting the application: %v", err.Error())
+		return
+	}
+
+	
 }
 
 //it will return a json with all the applications owned by the student (even the privates one)
