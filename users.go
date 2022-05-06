@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"time"
 )
 
 type Student struct {
@@ -115,16 +114,4 @@ func registerOrGenerateTokenFromPaleoIDAccessToken(paleoidAccess string, connect
 		"userID":       student.ID,
 	}
 	return resp, false, nil
-}
-
-type Application struct {
-	ID          int       `json:"id"`
-	ContainerID string    `json:"containerID"`
-	Status      string    `json:"status"`
-	StudentID   int       `json:"studentID"`
-	Type        string    `json:type`
-	Name        string    `json:"name"`
-	Description string    `json:"description"`
-	CreatedAt   time.Time `json:"createdAt"`
-	IsPublic    bool      `json:"isPublic"`
 }
