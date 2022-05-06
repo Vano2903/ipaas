@@ -10,6 +10,8 @@ CREATE TABLE IF NOT EXISTS `applications` (
     `type` varchar(255) NOT NULL,
     `name` varchar(255) NOT NULL,
     `description` TEXT NOT NULL,
+    `githubRepo` varchar(255) NOT NULL,
+    `lastCommit` varchar(20) NOT NULL,
     `createdAt` datetime DEFAULT CURRENT_TIMESTAMP NOT NULL,
     `isPulic` tinyint(1) NOT NULL DEFAULT '0',
     PRIMARY KEY (`id`)
