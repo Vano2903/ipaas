@@ -10,10 +10,13 @@ import (
 func main() {
 	r := mux.NewRouter()
 
+	//! PUBLIC HANDLERS
+
 	r.HandleFunc("/oauth", handler.OauthHandler).Methods("GET")
 	r.HandleFunc("/tokens/new", handler.NewTokenPairFromRefreshTokenHandler).Methods("GET")
 	r.HandleFunc("/{studentID}/all", handler.GetAllApplicationsOfStudentPublic).Methods("GET")
 
+	//! USER HANDLERS
 	//user's router with access token middleware
 	userAreaRouter := r.PathPrefix("/user").Subrouter()
 	//set middleware on user area router
@@ -24,6 +27,7 @@ func main() {
 	//get all the applications (even the private one) must define the type (database, web, all)
 	userAreaRouter.HandleFunc("/getApps/{type}", handler.GetAllApplicationsOfStudentPrivate).Methods("GET")
 
+	//! DBaaS HANDLERS
 	//DBaaS router (subrouter of user area router so it has access token middleware)
 	dbRouter := userAreaRouter.PathPrefix("/db").Subrouter()
 	//let the user create a new database
@@ -32,10 +36,12 @@ func main() {
 	dbRouter.HandleFunc("/delete/{containerID}", handler.DeleteApplicationHandler).Methods("DELETE")
 	// dbRouter.HandleFunc("/export/{containerID}/{dbName}")
 
+	//! APPLICATIONS HANDLERS
 	//application router, it's the main part of the application
 	appRouter := userAreaRouter.PathPrefix("/app").Subrouter()
 	appRouter.HandleFunc("/new", handler.NewApplicationHandler).Methods("POST")
 	appRouter.HandleFunc("/delete/{containerID}", handler.DeleteApplicationHandler).Methods("DELETE")
+	appRouter.HandleFunc("/update/{containerID}", handler.UpdateApplicationHandler).Methods("POST")
 
 	server := &http.Server{
 		Addr:    "0.0.0.0:8080",
