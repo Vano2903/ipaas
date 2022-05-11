@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"os"
 	"os/exec"
+	"strings"
 	"time"
 
 	"github.com/docker/docker/api/types"
@@ -25,7 +26,7 @@ type ContainerController struct {
 
 //given the creator id, port to expose (in the docker), name of the app, path for the tmp file, lang for the dockerfile and envs
 //it will return the image name, image id and a possible error
-func (c ContainerController) CreateImage(creatorID, port int, name, path, language string, envs [][]string) (string, string, error) {
+func (c ContainerController) CreateImage(creatorID, port int, name, path, language string, envs map[string]string) (string, string, error) {
 	//check if the language is supported
 	var found bool
 	for _, l := range Langs {
@@ -49,11 +50,8 @@ func (c ContainerController) CreateImage(creatorID, port int, name, path, langua
 	//set the env variables in a string with syntax
 	//ENV key value
 	var envString string
-	for _, e := range envs {
-		if len(e) != 2 {
-			return "", "", fmt.Errorf("invalid env %v, the len of the environment must be 2", e)
-		}
-		envString += fmt.Sprintf("ENV %s %s ", e[0], e[1])
+	for key, value := range envs {
+		envString += fmt.Sprintf("ENV %s %s ", key, value)
 	}
 
 	//create the dockerfile
@@ -120,7 +118,7 @@ func (c ContainerController) CreateImage(creatorID, port int, name, path, langua
 		return "", "", err
 	}
 
-	return imageName[0], out.String(), nil
+	return imageName[0], strings.Replace(out.String(), "\n", "", -1), nil
 }
 
 //remove an image from the image id

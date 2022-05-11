@@ -71,7 +71,7 @@ func (h Handler) TokensMiddleware(next http.Handler) http.Handler {
 //the body should contain:
 //1) db name
 //2) db type (mysql, mariadb, mongodb)
-//3) (not implemented) db version (can be null which will mean the latest version)
+//! 3) (not implemented) db version (can be null which will mean the latest version)
 func (h Handler) NewDBHandler(w http.ResponseWriter, r *http.Request) {
 	//connect to the db
 	conn, err := connectToDB()
@@ -80,6 +80,7 @@ func (h Handler) NewDBHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer conn.Close()
+
 	//get the student from the cookies
 	student, err := h.util.GetUserFromCookie(r, conn)
 	if err != nil {
@@ -209,12 +210,6 @@ func (h Handler) NewApplicationHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// fmt.Println("repo:", repo)
-	// fmt.Println("name:", name)
-
-	// repo := "tmp/18008-testing"
-	// name := "testing"
-
 	//port to expose for the app
 	port, err := strconv.Atoi(appPost.Port)
 	if err != nil {
@@ -223,7 +218,7 @@ func (h Handler) NewApplicationHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	//create the image from the repo downloaded
-	imageName, imageID, err := h.cc.CreateImage(student.ID, port, name, repo, appPost.Language, nil)
+	imageName, imageID, err := h.cc.CreateImage(student.ID, port, name, repo, appPost.Language, appPost.Envs)
 	if err != nil {
 		resp.Errorf(w, http.StatusInternalServerError, "error creating the image: %v", err.Error())
 		return
@@ -236,13 +231,6 @@ func (h Handler) NewApplicationHandler(w http.ResponseWriter, r *http.Request) {
 	id, err := h.cc.CreateNewApplicationFromRepo(student.ID, appPost.Port, name, appPost.Language, imageName)
 	if err != nil {
 		resp.Errorf(w, http.StatusInternalServerError, "error creating the container: %v", err.Error())
-		return
-	}
-
-	//remove the image created
-	err = h.cc.RemoveImage(imageID)
-	if err != nil {
-		resp.Errorf(w, http.StatusInternalServerError, "error removing the image: %v", err.Error())
 		return
 	}
 
@@ -267,16 +255,40 @@ func (h Handler) NewApplicationHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	fmt.Println("status:", status)
 
+	//remove the image created
+	err = h.cc.RemoveImage(imageID)
+	if err != nil {
+		resp.Errorf(w, http.StatusInternalServerError, "error removing the image: %v", err.Error())
+		return
+	}
+
 	//add a new database application created by the student (student id)
 	insertApplicationQuery := `
-	INSERT INTO applications (containerID, status, studentID, type, name, description, githubRepo, lastCommit) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+	INSERT INTO applications 
+	(containerID, status, studentID, type, name, description, githubRepo, lastCommit, port, language) 
+	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
 	//exec the query, the status will be up and type database, the name will follow the nomenclature of <studentID>:<dbType>/<dbName>
-	_, err = conn.Exec(insertApplicationQuery, id, status, student.ID, "web", imageName, appPost.Description, appPost.GithubRepoUrl, hash)
+	app, err := conn.Exec(insertApplicationQuery, id, status, student.ID, "web", imageName, appPost.Description, appPost.GithubRepoUrl, hash, appPost.Port, appPost.Language)
 	if err != nil {
 		resp.Errorf(w, http.StatusInternalServerError, "unable to link the application to the user: %v", err.Error())
 		return
+	}
+
+	appId, err := app.LastInsertId()
+	if err != nil {
+		resp.Errorf(w, http.StatusInternalServerError, "unable to link the application to the user: %v", err.Error())
+		return
+	}
+
+	insertEnvsQuery := `INSERT INTO envs (applicationID, key, value) VALUES (?, ?, ?)`
+	for key, value := range appPost.Envs {
+		_, err = conn.Exec(insertEnvsQuery, appId, key, value)
+		if err != nil {
+			resp.Errorf(w, http.StatusInternalServerError, "unable to insert the env: %v", err.Error())
+			return
+		}
 	}
 
 	toSend := map[string]interface{}{
@@ -284,8 +296,6 @@ func (h Handler) NewApplicationHandler(w http.ResponseWriter, r *http.Request) {
 		"external port": "127.0.0.1:" + exernalPort,
 		"status":        status,
 	}
-	// logs, _ := h.cc.GetContainerLogs(id)
-	// fmt.Println("logs: ", logs)
 
 	resp.SuccessParse(w, http.StatusOK, "application created", toSend)
 }
@@ -312,7 +322,8 @@ func (h Handler) DeleteApplicationHandler(w http.ResponseWriter, r *http.Request
 
 	//get the application from the database and check if it's owned by the student
 	var app Application
-	err = conn.QueryRow(`SELECT * FROM applications WHERE studentID = ? AND containerID = ?`, student.ID, containerID).Scan(&app.ID, &app.ContainerID, &app.Status, &app.StudentID, &app.Type, &app.Name, &app.Description, &app.CreatedAt, &app.IsPublic)
+	var tmp, githubRepo, LastCommitHash, port, Lang sql.NullString
+	err = conn.QueryRow(`SELECT * FROM applications WHERE studentID = ? AND containerID = ?`, student.ID, containerID).Scan(&app.ID, &app.ContainerID, &app.Status, &app.StudentID, &app.Type, &app.Name, &app.Description, &githubRepo, &LastCommitHash, &tmp, &port, &Lang, &app.CreatedAt, &app.IsPublic)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			resp.Errorf(w, http.StatusBadRequest, "application not found, the application might have the wrong container id or you dont own it")
@@ -321,6 +332,10 @@ func (h Handler) DeleteApplicationHandler(w http.ResponseWriter, r *http.Request
 		resp.Errorf(w, http.StatusInternalServerError, "error getting the application: %v", err.Error())
 		return
 	}
+	app.GithubRepo = githubRepo.String
+	app.LastCommitHash = LastCommitHash.String
+	app.Port = port.String
+	app.Lang = Lang.String
 
 	//delete the container
 	err = h.cc.DeleteContainer(containerID)
@@ -333,6 +348,12 @@ func (h Handler) DeleteApplicationHandler(w http.ResponseWriter, r *http.Request
 	_, err = conn.Exec(`DELETE FROM applications WHERE containerID = ?`, containerID)
 	if err != nil {
 		resp.Errorf(w, http.StatusInternalServerError, "error deleting the application: %v", err.Error())
+		return
+	}
+
+	_, err = conn.Exec(`DELETE FROM envs WHERE applicationID = ?`, app.ID)
+	if err != nil {
+		resp.Errorf(w, http.StatusInternalServerError, "error deleting the envs: %v", err.Error())
 		return
 	}
 	resp.Success(w, http.StatusOK, "container deleted successfully")
@@ -359,7 +380,7 @@ func (h Handler) UpdateApplicationHandler(w http.ResponseWriter, r *http.Request
 
 	//get the application from the database and check if it's owned by the student
 	var app Application
-	err = conn.QueryRow(`SELECT * FROM applications WHERE studentID = ? AND containerID = ?`, student.ID, containerID).Scan(&app.ID, &app.ContainerID, &app.Status, &app.StudentID, &app.Type, &app.Name, &app.Description, &app.CreatedAt, &app.IsPublic)
+	err = conn.QueryRow(`SELECT * FROM applications WHERE studentID = ? AND containerID = ?`, student.ID, containerID).Scan(&app.ID, &app.ContainerID, &app.Status, &app.StudentID, &app.Type, &app.Name, &app.Description, &app.GithubRepo, &app.LastCommitHash, &app.Port, &app.CreatedAt, &app.IsPublic)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			resp.Errorf(w, http.StatusBadRequest, "application not found, the application might have the wrong container id or you dont own it")
@@ -369,7 +390,140 @@ func (h Handler) UpdateApplicationHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	
+	//check if the commit has changed
+	changed, err := h.util.HasLastCommitChanged(app.LastCommitHash, app.GithubRepo, "")
+	if err != nil {
+		resp.Errorf(w, http.StatusInternalServerError, "error checking if the commit has changed: %v", err.Error())
+		return
+	}
+	if !changed {
+		resp.Errorf(w, http.StatusBadRequest, "the repo commit has not changed, the application will not be updated")
+		return
+	}
+
+	//delete the container
+	err = h.cc.DeleteContainer(containerID)
+	if err != nil {
+		resp.Errorf(w, http.StatusInternalServerError, "error deleting the container: %v", err.Error())
+		return
+	}
+
+	//get the environment variables
+	envs := make(map[string]string)
+	rows, err := conn.Query(`SELECT * FROM envs WHERE applicationID = ?`, app.ID)
+	if err != nil {
+		resp.Errorf(w, http.StatusInternalServerError, "error getting the envs: %v", err.Error())
+		return
+	}
+	for rows.Next() {
+		var tmp int
+		var key, value string
+		err = rows.Scan(&tmp, &key, &value)
+		if err != nil {
+			resp.Errorf(w, http.StatusInternalServerError, "error getting the envs: %v", err.Error())
+			return
+		}
+		envs[key] = value
+	}
+
+	//download the repo
+	repo, name, hash, err := h.util.DownloadGithubRepo(student.ID, "BRANCH", app.GithubRepo)
+	if err != nil {
+		resp.Errorf(w, http.StatusInternalServerError, "error downloading the repo, try again in one minute: %v", err.Error())
+		return
+	}
+
+	//port to expose for the app
+	port, err := strconv.Atoi(app.Port)
+	if err != nil {
+		resp.Errorf(w, http.StatusBadRequest, "error converting the port to an int: %v", err.Error())
+		return
+	}
+
+	//create the image from the repo downloaded
+	imageName, imageID, err := h.cc.CreateImage(student.ID, port, name, repo, app.Lang, envs)
+	if err != nil {
+		resp.Errorf(w, http.StatusInternalServerError, "error creating the image: %v", err.Error())
+		return
+	}
+
+	//create the container from the image just created
+	id, err := h.cc.CreateNewApplicationFromRepo(student.ID, app.Port, name, app.Lang, imageName)
+	if err != nil {
+		resp.Errorf(w, http.StatusInternalServerError, "error creating the container: %v", err.Error())
+		return
+	}
+
+	//remove the repo after creating the application
+	err = os.RemoveAll(repo)
+	if err != nil {
+		resp.Errorf(w, http.StatusInternalServerError, "error removing the repo: %v", err)
+		return
+	}
+
+	exernalPort, err := h.cc.GetContainerExternalPort(id, app.Port)
+	if err != nil {
+		resp.Errorf(w, http.StatusInternalServerError, "error getting the external port: %v", err.Error())
+		return
+	}
+
+	//get the status of the application
+	status, err := h.cc.GetContainerStatus(id)
+	if err != nil {
+		resp.Errorf(w, http.StatusInternalServerError, "error getting the status of the container: %v", err.Error())
+		return
+	}
+	fmt.Println("status:", status)
+
+	//remove the image created
+	err = h.cc.RemoveImage(imageID)
+	if err != nil {
+		resp.Errorf(w, http.StatusInternalServerError, "error removing the image: %v", err.Error())
+		return
+	}
+
+	//add a new database application created by the student (student id)
+	insertApplicationQuery := `
+	INSERT INTO applications 
+	(containerID, status, studentID, type, name, description, githubRepo, lastCommit, port, language, createdAt) 
+	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`
+
+	//exec the query, the status will be up and type database, the name will follow the nomenclature of <studentID>:<dbType>/<dbName>
+	appDB, err := conn.Exec(insertApplicationQuery, id, status, student.ID, "web", imageName, app.Description, app.GithubRepo, hash, app.Port, app.Lang, app.CreatedAt)
+	if err != nil {
+		resp.Errorf(w, http.StatusInternalServerError, "unable to link the application to the user: %v", err.Error())
+		return
+	}
+
+	//delete the old application
+	deleteOldApplicationQuery := `DELETE FROM applications WHERE id = ?`
+	_, err = conn.Exec(deleteOldApplicationQuery, app.ID)
+	if err != nil {
+		resp.Errorf(w, http.StatusInternalServerError, "unable to delete the old application: %v", err.Error())
+		return
+	}
+
+	appId, err := appDB.LastInsertId()
+	if err != nil {
+		resp.Errorf(w, http.StatusInternalServerError, "unable to link the application to the user: %v", err.Error())
+		return
+	}
+
+	updateEnvsQuery := `UPDATE envs SET applicationID = ? WHERE applicationID = ?`
+	_, err = conn.Exec(updateEnvsQuery, appId, app.ID)
+	if err != nil {
+		resp.Errorf(w, http.StatusInternalServerError, "unable to link the application to the user: %v", err.Error())
+		return
+	}
+
+	toSend := map[string]interface{}{
+		"container id":  id,
+		"external port": "127.0.0.1:" + exernalPort,
+		"status":        status,
+	}
+
+	resp.SuccessParse(w, http.StatusOK, "application created", toSend)
 }
 
 //it will return a json with all the applications owned by the student (even the privates one)
@@ -417,11 +571,17 @@ func (h Handler) GetAllApplicationsOfStudentPrivate(w http.ResponseWriter, r *ht
 	var applications []Application
 	for rows.Next() {
 		var app Application
-		err = rows.Scan(&app.ID, &app.ContainerID, &app.Status, &app.StudentID, &app.Type, &app.Name, &app.Description, &app.CreatedAt, &app.IsPublic)
+		var tmp, githubRepo, LastCommitHash, port, Lang sql.NullString
+
+		err = rows.Scan(&app.ID, &app.ContainerID, &app.Status, &app.StudentID, &app.Type, &app.Name, &app.Description, &githubRepo, &LastCommitHash, &tmp, &port, &Lang, &app.CreatedAt, &app.IsPublic)
 		if err != nil {
 			resp.Errorf(w, http.StatusInternalServerError, "error getting the applications: %v", err.Error())
 			return
 		}
+		app.GithubRepo = githubRepo.String
+		app.LastCommitHash = LastCommitHash.String
+		app.Port = port.String
+		app.Lang = Lang.String
 		applications = append(applications, app)
 	}
 
@@ -442,7 +602,7 @@ func (h Handler) GetAllApplicationsOfStudentPublic(w http.ResponseWriter, r *htt
 	defer conn.Close()
 
 	//get all the public web applications of the student
-	rows, err := conn.Query("SELECT * FROM applications WHERE type = 'web' AND isPublic = 1 AND studentID = ?", studentID)
+	rows, err := conn.Query("SELECT * FROM applications WHERE type = 'web' AND isPulic = 1 AND studentID = ?", studentID)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			resp.Error(w, http.StatusNotFound, "No applications found, check if the student id is correct")
@@ -456,11 +616,17 @@ func (h Handler) GetAllApplicationsOfStudentPublic(w http.ResponseWriter, r *htt
 	var applications []Application
 	for rows.Next() {
 		var app Application
-		err = rows.Scan(&app.ID, &app.ContainerID, &app.Status, &app.StudentID, &app.Type, &app.Name, &app.Description, &app.CreatedAt, &app.IsPublic)
+		var tmp, githubRepo, LastCommitHash, port, Lang sql.NullString
+
+		err = rows.Scan(&app.ID, &app.ContainerID, &app.Status, &app.StudentID, &app.Type, &app.Name, &app.Description, &githubRepo, &LastCommitHash, &tmp, &port, &Lang, &app.CreatedAt, &app.IsPublic)
 		if err != nil {
 			resp.Errorf(w, http.StatusInternalServerError, "error getting the applications: %v", err.Error())
 			return
 		}
+		app.GithubRepo = githubRepo.String
+		app.LastCommitHash = LastCommitHash.String
+		app.Port = port.String
+		app.Lang = Lang.String
 		applications = append(applications, app)
 	}
 	resp.SuccessParse(w, http.StatusOK, "Public applications of "+studentID, applications)
@@ -710,7 +876,7 @@ func NewHandler() (*Handler, error) {
 	if err != nil {
 		return nil, err
 	}
-	h.util, err = NewUtil()
+	h.util, err = NewUtil(h.cc.ctx)
 	if err != nil {
 		return nil, err
 	}

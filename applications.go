@@ -10,11 +10,12 @@ import (
 )
 
 type AppPost struct {
-	GithubRepoUrl string `json:"github-repo"`
-	GithubBranch  string `json:"github-branch"`
-	Language      string `json:"language"`
-	Port          string `json:"port"`
-	Description   string `json:"description,omitempty"`
+	GithubRepoUrl string            `json:"github-repo"`
+	GithubBranch  string            `json:"github-branch"`
+	Language      string            `json:"language"`
+	Port          string            `json:"port"`
+	Description   string            `json:"description,omitempty"`
+	Envs          map[string]string `json:"envs,omitempty"`
 }
 
 type Application struct {
@@ -27,6 +28,8 @@ type Application struct {
 	Description    string    `json:"description"`
 	GithubRepo     string    `json:"githubRepo"`
 	LastCommitHash string    `json:"lastCommitHash"`
+	Port           string    `json:"port"`
+	Lang           string    `json:"lang"`
 	CreatedAt      time.Time `json:"createdAt"`
 	IsPublic       bool      `json:"isPublic"`
 }
@@ -84,4 +87,8 @@ func (c ContainerController) CreateNewApplicationFromRepo(creatorID int, port, n
 	}
 
 	return containerBody.ID, nil
+}
+
+func (c ContainerController) GetAppInfoFromContainer(containerId string) (AppPost, string, error) {
+	return AppPost{}, "", nil
 }

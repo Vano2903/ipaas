@@ -10,10 +10,21 @@ CREATE TABLE IF NOT EXISTS `applications` (
     `type` varchar(255) NOT NULL,
     `name` varchar(255) NOT NULL,
     `description` TEXT NOT NULL,
-    `githubRepo` varchar(255) NOT NULL,
-    `lastCommit` varchar(20) NOT NULL,
+    `githubRepo` varchar(255),
+    `lastCommit` varchar(20),
+    `branch` varchar(255),
+    `port` varchar(5),
+    `language` varchar(255),
     `createdAt` datetime DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    `isPulic` tinyint(1) NOT NULL DEFAULT '0',
+    `isPublic` tinyint(1) NOT NULL DEFAULT '0',
+    PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+
+CREATE TABLE IF NOT EXISTS `envs` (
+    `id` int(11) NOT NULL AUTO_INCREMENT,
+    `applicationID` int(11) NOT NULL,
+    `key` varchar(255) NOT NULL,
+    `value` text NOT NULL,
     PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 

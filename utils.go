@@ -1,12 +1,15 @@
 package main
 
 import (
+	"bytes"
+	"context"
 	"database/sql"
 	"fmt"
 	"math/rand"
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"strings"
 	"time"
 
@@ -23,6 +26,7 @@ var (
 )
 
 type Util struct {
+	ctx context.Context
 }
 
 //get the student from the database given a valid access token (will be retrived from cookies)
@@ -110,10 +114,24 @@ func (u Util) DownloadGithubRepo(userID int, branch, url string) (string, string
 	return fmt.Sprintf("./tmp/%d-%s", userID, repoName), repoName, commitHash.Hash.String(), nil
 }
 
+//given the github information of a repo it will tell if the commit has changed in the remote repo
+func (u Util) HasLastCommitChanged(commit, url, branch string) (bool, error) {
+	//output buffer so it doesnt print in the stdout
+	var out bytes.Buffer
+	cmd := exec.CommandContext(u.ctx, "git", "ls-remote", url, "| head -n1 | cut -f1")
+	cmd.Stdout = &out
+	err := cmd.Run()
+	if err != nil {
+		return false, err
+	}
+	remoteCommit := out.String()
+	return remoteCommit != commit, nil
+}
+
 //generate a new pointer to the util struct
 //is like a constructor
-func NewUtil() (*Util, error) {
-	return &Util{}, nil
+func NewUtil(ctx context.Context) (*Util, error) {
+	return &Util{ctx: ctx}, nil
 }
 
 //returns a pointer to a db connection
