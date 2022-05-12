@@ -7,24 +7,62 @@ import (
 	"github.com/gorilla/mux"
 )
 
+/*
+!PAGES ENDPOINTS:
+*endpoints for public pages:
+/static -> static files
+/ -> homepage
+/login -> login page
+/{studentID} -> public student page
+/{studentID}/{appID} -> public app page with info of it
+
+*endpoints for student pages:
+/user/ -> user area
+/user/application/new -> new application page
+/user/database/new -> new database page
+
+!API ENDPOINTS:
+*public api endpoints:
+/api/oauth -> oauth endpoint (generate the oauth url)
+/api/tokens/new -> get a new token pair from a refresh token
+/api/{studentID}/all -> get all the public applications of a student
+/api/{studentID}/{appID} -> get the info of a public application
+
+*user api endpoints:
+/api/user/ -> get the info of the user
+/api/user/getApps/{type} -> get all the applications of a user (private or public)
+
+*api endpoints for database:
+/api/db/new -> create a new database
+/api/db/delete/{containerID} -> delete a database
+/api/db/delete/{containerID} -> delete a database
+! not implemented /api/db/export/{containerID}/{dbName} -> export a database
+
+*api endpoints for applications:
+/api/app/new -> create a new application
+/api/app/delete/{containerID} -> delete an application
+/api/app/update/{containerID} -> update an application if the repo is changed
+*/
+
 func main() {
 	mainRouter := mux.NewRouter()
-	mainRouter.Handle("/static", http.StripPrefix("/static", http.FileServer(http.Dir("static"))))
-	mainRouter.HandleFunc("/", handler.homePageHandler)
-	mainRouter.HandleFunc("/login", handler.loginPageHandler)
-	mainRouter.HandleFunc("/{studentID}", handler.publicStudentPageHandler)
-	mainRouter.HandleFunc("/{studentID}/{appID}", handler.publicAppPageHandler)
+	mainRouter.PathPrefix("/static").Handler(http.StripPrefix("/static", http.FileServer(http.Dir("static/"))))
+
+	mainRouter.HandleFunc("/", handler.HomePageHandler)
+	mainRouter.HandleFunc("/login", handler.LoginPageHandler)
+	// mainRouter.HandleFunc("/{studentID}", handler.PublicStudentPageHandler)
+	// mainRouter.HandleFunc("/{studentID}/{appID}", handler.PublicAppPageHandler)
 
 	//user's router with access token middleware
 	userAreaRouter := mainRouter.PathPrefix("/user").Subrouter()
 	//set middleware on user area router
 	userAreaRouter.Use(handler.TokensMiddleware)
 	//homepage
-	userAreaRouter.HandleFunc("/", handler.userPageHandler).Methods("GET")
+	userAreaRouter.HandleFunc("/", handler.UserPageHandler).Methods("GET")
 	//page to create a new application
-	userAreaRouter.HandleFunc("/application/new", handler.newAppPageHandler).Methods("GET")
+	// userAreaRouter.HandleFunc("/application/new", handler.NewAppPageHandler).Methods("GET")
 	//page to create a new database
-	userAreaRouter.HandleFunc("/database/new", handler.newDatabasePageHandler).Methods("GET")
+	// userAreaRouter.HandleFunc("/database/new", handler.NewDatabasePageHandler).Methods("GET")
 
 	//!API HANDLERS
 	api := mainRouter.PathPrefix("/api").Subrouter()
@@ -33,32 +71,35 @@ func main() {
 	api.HandleFunc("/oauth", handler.OauthHandler).Methods("GET")
 	api.HandleFunc("/tokens/new", handler.NewTokenPairFromRefreshTokenHandler).Methods("GET")
 	api.HandleFunc("/{studentID}/all", handler.GetAllApplicationsOfStudentPublic).Methods("GET")
-	api.HandleFunc("/{studentID}/{appID}", handler.GetInfoApplication).Methods("GET")
+	// api.HandleFunc("/{studentID}/{appID}", handler.GetInfoApplication).Methods("GET")
 
 	//! USER HANDLERS
+	userApiRouter := api.PathPrefix("/user").Subrouter()
+	userApiRouter.Use(handler.TokensMiddleware)
+
 	//get the user data
 	//still kinda don't know what to do with this one, will probably return the homepage
-	userAreaRouter.HandleFunc("/", handler.LoginHandler).Methods("GET")
+	userApiRouter.HandleFunc("/", handler.LoginHandler).Methods("GET")
 	//get all the applications (even the private one) must define the type (database, web, all)
-	userAreaRouter.HandleFunc("/getApps/{type}", handler.GetAllApplicationsOfStudentPrivate).Methods("GET")
+	userApiRouter.HandleFunc("/getApps/{type}", handler.GetAllApplicationsOfStudentPrivate).Methods("GET")
 
 	//! DBaaS HANDLERS
 	//DBaaS router (subrouter of user area router so it has access token middleware)
-	dbRouter := api.PathPrefix("/db").Subrouter()
-	dbRouter.Use(handler.TokensMiddleware)
+	dbApiRouter := api.PathPrefix("/db").Subrouter()
+	dbApiRouter.Use(handler.TokensMiddleware)
 	//let the user create a new database
-	dbRouter.HandleFunc("/new", handler.NewDBHandler).Methods("POST")
+	dbApiRouter.HandleFunc("/new", handler.NewDBHandler).Methods("POST")
 	//delete a database
-	dbRouter.HandleFunc("/delete/{containerID}", handler.DeleteApplicationHandler).Methods("DELETE")
-	// dbRouter.HandleFunc("/export/{containerID}/{dbName}")
+	dbApiRouter.HandleFunc("/delete/{containerID}", handler.DeleteApplicationHandler).Methods("DELETE")
+	// dbApiRouter.HandleFunc("/export/{containerID}/{dbName}")
 
 	//! APPLICATIONS HANDLERS
 	//application router, it's the main part of the application
-	appRouter := api.PathPrefix("/app").Subrouter()
-	api.Use(handler.TokensMiddleware)
-	appRouter.HandleFunc("/new", handler.NewApplicationHandler).Methods("POST")
-	appRouter.HandleFunc("/delete/{containerID}", handler.DeleteApplicationHandler).Methods("DELETE")
-	appRouter.HandleFunc("/update/{containerID}", handler.UpdateApplicationHandler).Methods("POST")
+	appApiRouter := api.PathPrefix("/app").Subrouter()
+	appApiRouter.Use(handler.TokensMiddleware)
+	appApiRouter.HandleFunc("/new", handler.NewApplicationHandler).Methods("POST")
+	appApiRouter.HandleFunc("/delete/{containerID}", handler.DeleteApplicationHandler).Methods("DELETE")
+	appApiRouter.HandleFunc("/update/{containerID}", handler.UpdateApplicationHandler).Methods("POST")
 
 	server := &http.Server{
 		Addr:    "0.0.0.0:8080",
