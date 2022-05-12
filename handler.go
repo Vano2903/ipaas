@@ -684,7 +684,6 @@ func (h Handler) OauthHandler(w http.ResponseWriter, r *http.Request) {
 		http.SetCookie(w, &http.Cookie{
 			Name:    "refreshToken",
 			Path:    "/",
-			Path:    "/",
 			Value:   response["refreshToken"].(string),
 			Expires: time.Now().Add(time.Hour * 24 * 7),
 		})
