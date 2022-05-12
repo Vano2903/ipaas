@@ -1,177 +1,111 @@
 package main
 
-// var (
-// 	cli *client.Client
-// )
+import (
+	"log"
+	"net/http"
 
-// func CreateNewContainer(name, image, tag string, natPort int, environment []string) (string, error) {
-// 	//set the nat ip to localhost
-// 	hostBinding := nat.PortBinding{
-// 		HostIP: "0.0.0.0",
-// 		//HostPort is the port that the host will listen to, since it's not set
-// 		//the docker engine will assign a random open port
+	"github.com/gorilla/mux"
+)
 
-// 		// HostPort: "8080",
-// 	}
+/*
+!PAGES ENDPOINTS:
+*endpoints for public pages:
+/static -> static files
+/ -> homepage
+/login -> login page
+/{studentID} -> public student page
+/{studentID}/{appID} -> public app page with info of it
 
-// 	//set the port for the container (internal one)
-// 	containerPort, err := nat.NewPort("tcp", strconv.Itoa(natPort))
-// 	if err != nil {
-// 		return "", fmt.Errorf("unable to bind port: %v", err)
-// 	}
+*endpoints for student pages:
+/user/ -> user area
+/user/application/new -> new application page
+/user/database/new -> new database page
 
-// 	//set a slice of possible port bindings,
-// 	portBinding := nat.PortMap{containerPort: []nat.PortBinding{hostBinding}}
-// 	cont, err := cli.ContainerCreate(
-// 		context.Background(),
-// 		&container.Config{
-// 			Image:  image,
-// 			Labels: map[string]string{"vano": "vano"},
-// 			Env:    environment,
-// 		},
-// 		&container.HostConfig{
-// 			PortBindings: portBinding,
-// 		}, nil, nil, "") //vanoncini.18008-quizz
+!API ENDPOINTS:
+*public api endpoints:
+/api/oauth -> oauth endpoint (generate the oauth url)
+/api/tokens/new -> get a new token pair from a refresh token
+/api/{studentID}/all -> get all the public applications of a student
+/api/{studentID}/{appID} -> get the info of a public application
 
-// 	if err != nil {
-// 		return "", err
-// 	}
+*user api endpoints:
+/api/user/ -> get the info of the user
+/api/user/getApps/{type} -> get all the applications of a user (private or public)
 
-// 	cli.ContainerStart(context.Background(), cont.ID, types.ContainerStartOptions{})
-// 	fmt.Printf("container started, id is %s\n", cont.ID)
-// 	return cont.ID, nil
-// }
+*api endpoints for database:
+/api/db/new -> create a new database
+/api/db/delete/{containerID} -> delete a database
+/api/db/delete/{containerID} -> delete a database
+! not implemented /api/db/export/{containerID}/{dbName} -> export a database
 
-// func main() {
-// 	fmt.Println(CreateNewContainer("nginx"))
-// }
+*api endpoints for applications:
+/api/app/new -> create a new application
+/api/app/delete/{containerID} -> delete an application
+/api/app/update/{containerID} -> update an application if the repo is changed
+*/
 
-// func main() {
-// 	ctx := context.Background()
-// 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
-// 	if err != nil {
-// 		panic(err)
-// 	}
+func main() {
+	mainRouter := mux.NewRouter()
+	mainRouter.PathPrefix("/static").Handler(http.StripPrefix("/static", http.FileServer(http.Dir("static/"))))
 
-// 	reader, err := cli.ImagePull(ctx, "docker.io/library/alpine", types.ImagePullOptions{})
-// 	if err != nil {
-// 		panic(err)
-// 	}
+	mainRouter.HandleFunc("/", handler.HomePageHandler)
+	mainRouter.HandleFunc("/login", handler.LoginPageHandler)
+	// mainRouter.HandleFunc("/{studentID}", handler.PublicStudentPageHandler)
+	// mainRouter.HandleFunc("/{studentID}/{appID}", handler.PublicAppPageHandler)
 
-// 	defer reader.Close()
-// 	io.Copy(os.Stdout, reader)
+	//user's router with access token middleware
+	userAreaRouter := mainRouter.PathPrefix("/user").Subrouter()
+	//set middleware on user area router
+	userAreaRouter.Use(handler.TokensMiddleware)
+	//homepage
+	userAreaRouter.HandleFunc("/", handler.UserPageHandler).Methods("GET")
+	//page to create a new application
+	// userAreaRouter.HandleFunc("/application/new", handler.NewAppPageHandler).Methods("GET")
+	//page to create a new database
+	// userAreaRouter.HandleFunc("/database/new", handler.NewDatabasePageHandler).Methods("GET")
 
-// 	resp, err := cli.ContainerCreate(ctx, &container.Config{
-// 		Image: "alpine",
-// 		Cmd:   []string{"echo", "hello world"},
-// 		Tty:   false,
-// 	}, nil, nil, nil, "")
-// 	if err != nil {
-// 		panic(err)
-// 	}
+	//!API HANDLERS
+	api := mainRouter.PathPrefix("/api").Subrouter()
 
-// 	if err := cli.ContainerStart(ctx, resp.ID, types.ContainerStartOptions{}); err != nil {
-// 		panic(err)
-// 	}
+	//! PUBLIC HANDLERS
+	api.HandleFunc("/oauth", handler.OauthHandler).Methods("GET")
+	api.HandleFunc("/tokens/new", handler.NewTokenPairFromRefreshTokenHandler).Methods("GET")
+	api.HandleFunc("/{studentID}/all", handler.GetAllApplicationsOfStudentPublic).Methods("GET")
+	// api.HandleFunc("/{studentID}/{appID}", handler.GetInfoApplication).Methods("GET")
 
-// 	statusCh, errCh := cli.ContainerWait(ctx, resp.ID, container.WaitConditionNotRunning)
-// 	select {
-// 	case err := <-errCh:
-// 		if err != nil {
-// 			panic(err)
-// 		}
-// 	case <-statusCh:
-// 	}
+	//! USER HANDLERS
+	userApiRouter := api.PathPrefix("/user").Subrouter()
+	userApiRouter.Use(handler.TokensMiddleware)
 
-// 	out, err := cli.ContainerLogs(ctx, resp.ID, types.ContainerLogsOptions{ShowStdout: true})
-// 	if err != nil {
-// 		panic(err)
-// 	}
+	//get the user data
+	//still kinda don't know what to do with this one, will probably return the homepage
+	userApiRouter.HandleFunc("/", handler.LoginHandler).Methods("GET")
+	//get all the applications (even the private one) must define the type (database, web, all)
+	userApiRouter.HandleFunc("/getApps/{type}", handler.GetAllApplicationsOfStudentPrivate).Methods("GET")
 
-// 	stdcopy.StdCopy(os.Stdout, os.Stderr, out)
-// }
+	//! DBaaS HANDLERS
+	//DBaaS router (subrouter of user area router so it has access token middleware)
+	dbApiRouter := api.PathPrefix("/db").Subrouter()
+	dbApiRouter.Use(handler.TokensMiddleware)
+	//let the user create a new database
+	dbApiRouter.HandleFunc("/new", handler.NewDBHandler).Methods("POST")
+	//delete a database
+	dbApiRouter.HandleFunc("/delete/{containerID}", handler.DeleteApplicationHandler).Methods("DELETE")
+	// dbApiRouter.HandleFunc("/export/{containerID}/{dbName}")
 
-// func main() {
-// 	ctx := context.Background()
-// 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
-// 	if err != nil {
-// 		panic(err)
-// 	}
+	//! APPLICATIONS HANDLERS
+	//application router, it's the main part of the application
+	appApiRouter := api.PathPrefix("/app").Subrouter()
+	appApiRouter.Use(handler.TokensMiddleware)
+	appApiRouter.HandleFunc("/new", handler.NewApplicationHandler).Methods("POST")
+	appApiRouter.HandleFunc("/delete/{containerID}", handler.DeleteApplicationHandler).Methods("DELETE")
+	appApiRouter.HandleFunc("/update/{containerID}", handler.UpdateApplicationHandler).Methods("POST")
 
-// 	imageName := "bfirsh/reticulate-splines"
+	server := &http.Server{
+		Addr:    "0.0.0.0:8080",
+		Handler: mainRouter,
+	}
 
-// 	out, err := cli.ImagePull(ctx, imageName, types.ImagePullOptions{})
-// 	if err != nil {
-// 		panic(err)
-// 	}
-// 	defer out.Close()
-// 	io.Copy(os.Stdout, out)
-
-// 	resp, err := cli.ContainerCreate(ctx, &container.Config{
-// 		Image: imageName,
-// 	}, nil, nil, nil, "")
-// 	if err != nil {
-// 		panic(err)
-// 	}
-
-// 	if err := cli.ContainerStart(ctx, resp.ID, types.ContainerStartOptions{}); err != nil {
-// 		panic(err)
-// 	}
-
-// 	fmt.Println(resp.ID)
-// }
-
-// func main() {
-// 	ctx := context.Background()
-// 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
-// 	if err != nil {
-// 		panic(err)
-// 	}
-
-// 	containers, err := cli.ContainerList(ctx, types.ContainerListOptions{})
-// 	if err != nil {
-// 		panic(err)
-// 	}
-
-// 	for _, container := range containers {
-// 		fmt.Println(container)
-// 	}
-// }
-
-// func main() {
-// 	ctx := context.Background()
-// 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
-// 	if err != nil {
-// 		panic(err)
-// 	}
-
-// 	containers, err := cli.ContainerList(ctx, types.ContainerListOptions{})
-// 	if err != nil {
-// 		panic(err)
-// 	}
-
-// 	for _, container := range containers {
-// 		fmt.Print("Stopping container ", container.ID[:10], "... ")
-// 		if err := cli.ContainerStop(ctx, container.ID, nil); err != nil {
-// 			panic(err)
-// 		}
-// 		fmt.Println("Success")
-// 	}
-// }
-
-// func main() {
-// 	ctx := context.Background()
-// 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
-// 	if err != nil {
-// 		panic(err)
-// 	}
-
-// 	options := types.ContainerLogsOptions{ShowStdout: true}
-// 	// Replace this ID with a container that really exists
-// 	out, err := cli.ContainerLogs(ctx, "e2d52b8e7e", options)
-// 	if err != nil {
-// 		panic(err)
-// 	}
-
-// 	io.Copy(os.Stdout, out)
-// }
+	log.Println("starting the server on port 8080")
+	log.Fatal(server.ListenAndServe())
+}

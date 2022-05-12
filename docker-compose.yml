@@ -1,0 +1,37 @@
+version: "3.9"
+
+services:
+    # go:
+    #   # container_name: go
+    #   image: go
+    #   restart: always
+    #   build:
+    #     context: .
+    #     dockerfile: Dockerfile
+    #   links:
+    #     - db
+    #   ports:
+    #     - "80:8080"
+    #   networks:
+    #     - "ipaas"
+    db:
+      image: mariadb:10.2
+      restart: always
+      environment:
+        MYSQL_DATABASE: ipaas
+        MYSQL_ROOT_PASSWORD: root
+      ports:
+        - "3306:3306"
+      volumes:
+        - ./db/tables.sql:/docker-entrypoint-initdb.d/tables.sql
+        - ./ipaas-db-dump:/var/lib/mysql
+      command: ['mysqld', '--character-set-server=utf8mb4', '--collation-server=utf8mb4_unicode_ci']
+      # exec:
+      #     - mysql -uroot -proot -e"source /docker-entrypoint-initdb.d/tables.sql"
+      networks:
+        - "ipaas"
+volumes:
+  mariadb:
+
+networks:
+  ipaas:

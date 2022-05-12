@@ -1,56 +1,45 @@
 package main
 
 import (
-	"context"
-	"database/sql"
 	"fmt"
-	"math/rand"
-	"strings"
-	"time"
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
-	"github.com/docker/docker/client"
 	"github.com/docker/go-connections/nat"
-
-	_ "github.com/go-sql-driver/mysql"
 )
 
-var (
-	lowerCharSet = "abcdedfghijklmnopqrst"
-	upperCharSet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-	numberSet    = "0123456789"
-	allCharSet   = lowerCharSet + upperCharSet + numberSet
-	MYSQL_IMAGE  = "mysql"
-	MYSQL_PORT   = "3306"
-)
+type dbContainerConfig struct {
+	name  string
+	image string
+	port  string
+}
 
-func CreateNewDB(image, port string, env []string) (string, error) {
-	//set the context and client
-	ctx := context.Background()
-	cli, err := client.NewClientWithOpts(client.FromEnv)
-	if err != nil {
-		return "", err
-	}
+type dbPost struct {
+	DbName            string `json:"databaseName"`
+	DbType            string `json:"databaseType"`
+	DbVersion         string `json:"databaseVersion"`
+	DbTableCollection string `json:"databaseTable"`
+}
 
-	//pull the image, it wont pull it if it is already there
-	//it will update itself since if there is no tag by default it means latest
-	out, err := cli.ImagePull(ctx, image, types.ImagePullOptions{})
-	if err != nil {
-		return "", err
-	}
-	defer out.Close()
-	//!could be used to sent to the client the output of the pull
-	// io.Copy(os.Stdout, out)
+//TODO: ADD DB NAME
+//create a new database container given the db type, image, port, enviroment variables and volume
+//it returns the container id and an error
+func (c ContainerController) CreateNewDB(conf dbContainerConfig, env []string) (string, error) {
+	// //pull the image, it wont pull it if it is already there
+	// //it will update itself since if there is no tag by default it means latest
+	// out, err := c.cli.ImagePull(c.ctx, conf.image, types.ImagePullOptions{})
+	// if err != nil {
+	// 	return "", err
+	// }
+	// defer out.Close()
+	// //!could be used to sent to the client the output of the pull
+	// // io.Copy(os.Stdout, out)
 
-	//!container configurations
-
-	//container config
+	//container config (image and environment variables)
 	config := &container.Config{
-		Image: image,
+		Image: conf.image,
 		Env:   env,
 	}
-
 	//host config
 	hostBinding := nat.PortBinding{
 		HostIP: "0.0.0.0",
@@ -60,7 +49,9 @@ func CreateNewDB(image, port string, env []string) (string, error) {
 	}
 
 	//set the port for the container (internal one)
-	containerPort, err := nat.NewPort("tcp", port)
+
+	containerPort, err := nat.NewPort("tcp", conf.port)
+	fmt.Println("container port" + containerPort)
 	if err != nil {
 		return "", err
 	}
@@ -78,101 +69,89 @@ func CreateNewDB(image, port string, env []string) (string, error) {
 			Name:              "on-failure",
 			MaximumRetryCount: 5,
 		},
+		// Mounts: []mount.Mount{
+		// 	{
+		// 		Type:   "volume",
+		// 		Source: volumePath,
+		// 		Target: "/var/lib/mysql",
+		// 	},
+		// },
 	}
+
+	// networkConf := &network.NetworkingConfig{
+	// 	EndpointsConfig: map[string]*network.EndpointSettings{
+	// 		"ipaas-network": {
+	// 			NetworkID: "cf8bc28f9dcd413ece744e799e24c9be15cecae17e8225dc7e3b25db97644e10",
+	// 		},
+	// 	},
+	// }
 
 	//create the container
 	//!set a name to identify the container (<student-name>.<registration_number>-<db-name>)
-	resp, err := cli.ContainerCreate(ctx, config, hostConfig, nil, nil, "")
+	resp, err := c.cli.ContainerCreate(c.ctx, config, hostConfig, nil, nil, "")
 	if err != nil {
 		return "", err
 	}
 
 	//start the container
-	if err := cli.ContainerStart(ctx, resp.ID, types.ContainerStartOptions{}); err != nil {
+	if err := c.cli.ContainerStart(c.ctx, resp.ID, types.ContainerStartOptions{}); err != nil {
 		return "", err
 	}
+
+	// statusCh, errCh := c.cli.ContainerWait(c.ctx, resp.ID, container.WaitConditionNotRunning)
+	// select {
+	// case err := <-errCh:
+	// 	if err != nil {
+	// 		return "", err
+	// 	}
+	// case <-statusCh:
+	// }
 
 	return resp.ID, nil
 }
 
-//function to generate a random alphanumerical password without spaces
-func generatePassword() string {
-	minNum := 4
-	minUpperCase := 4
-	passwordLength := 16
+//!BACKLOG, UNDER DEVELOPMENT
 
-	rand.Seed(time.Now().Unix())
-	var password strings.Builder
+// func (c ContainerController) ExportDBData(containerID string, dbData dbPost) (string, error) {
+// 	//docker exec CONTAINER /usr/bin/mysqldump -u root --password=root DATABASE > /tmp/DATABASE.sql
 
-	//Set numeric
-	for i := 0; i < minNum; i++ {
-		random := rand.Intn(len(numberSet))
-		password.WriteString(string(numberSet[random]))
-	}
+// 	//check if the container id is an exadecimal string
+// 	_, err := strconv.ParseUint(containerID, 16, 64)
+// 	if err != nil {
+// 		return "", errors.New("not a valid container id")
+// 	}
 
-	//Set uppercase
-	for i := 0; i < minUpperCase; i++ {
-		random := rand.Intn(len(upperCharSet))
-		password.WriteString(string(upperCharSet[random]))
-	}
+// 	//get the container
+// 	container, err := c.cli.ContainerInspect(c.ctx, containerID)
+// 	if err != nil {
+// 		return "", err
+// 	}
 
-	remainingLength := passwordLength - minNum - minUpperCase
-	for i := 0; i < remainingLength; i++ {
-		random := rand.Intn(len(allCharSet))
-		password.WriteString(string(allCharSet[random]))
-	}
-	inRune := []rune(password.String())
-	rand.Shuffle(len(inRune), func(i, j int) {
-		inRune[i], inRune[j] = inRune[j], inRune[i]
-	})
-	return string(inRune)
-}
+// 	//get the database password
 
-func main() {
+// 	switch dbData.DbType {
+// 	case "mysql", "mariadb":
+// 		//get the database password from enviroment variables
+// 		dbPassword := container.Config.Env[1]
+// 		//create the command
+// 		cmd := fmt.Sprintf("docker exec %s /usr/bin/mysqldump -u root --password=%s %s > /tmp/%s.sql", dbPassword, dbName, containerID)
+// 		//execute the command
+// 		out, err := exec.Command("sh", "-c", cmd).Output()
+// 		if err != nil {
+// 			return "", err
+// 		}
+// 		log.Println("output", out)
+// 	case "mongodb":
+// 		//get the database password from enviroment variables
+// 		dbPassword := container.Config.Env[2]
+// 		//create the command
+// 		cmd := fmt.Sprintf("docker exec %s /usr/bin/mysqldump -u root --password=%s %s > /tmp/%s.sql", dbPassword, dbName, containerID)
+// 		//execute the command
+// 		out, err := exec.Command("sh", "-c", cmd).Output()
+// 		if err != nil {
+// 			return "", err
+// 		}
+// 		log.Println("output", out)
 
-	password := generatePassword()
-	fmt.Println("password:", password)
-
-	env := []string{
-		"MYSQL_ROOT_PASSWORD=" + password,
-		"MYSQL_USER=test",
-		"MYSQL_PASSWORD=test",
-		"MYSQL_DATABASE=test",
-	}
-
-	fmt.Println("creating new db")
-	id, _ := CreateNewDB(MYSQL_IMAGE, MYSQL_PORT, env)
-	fmt.Println(id)
-
-	//get the port that the container is listening to
-	cli, err := client.NewClientWithOpts(client.FromEnv)
-	if err != nil {
-		panic(err)
-	}
-	container, err := cli.ContainerInspect(context.Background(), "c61f796566ce")
-	if err != nil {
-		panic(err)
-	}
-
-	fmt.Println("getting port")
-	port := container.NetworkSettings.NetworkSettingsBase.Ports["3306/tcp"][0].HostPort
-
-	username := "test"
-	pass := "test"
-	dbName := "test"
-	fmt.Println("username", username)
-	fmt.Println("password", pass)
-	fmt.Println("database", dbName)
-	fmt.Println("port", port)
-
-	//connect to mysql
-	fmt.Println("connecting to mysql")
-	db, err := sql.Open("mysql", fmt.Sprintf("%s:%s@tcp(localhost:%s)/%s", username, pass, port, dbName))
-	if err != nil {
-		panic(err.Error())
-	}
-	defer db.Close()
-	if err := db.Ping(); err != nil {
-		panic(err.Error())
-	}
-}
+// 	}
+// }
