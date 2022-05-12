@@ -677,11 +677,14 @@ func (h Handler) OauthHandler(w http.ResponseWriter, r *http.Request) {
 		//!should set domain and path
 		http.SetCookie(w, &http.Cookie{
 			Name:    "accessToken",
+			Path:    "/",
 			Value:   response["accessToken"].(string),
 			Expires: time.Now().Add(time.Hour),
 		})
 		http.SetCookie(w, &http.Cookie{
 			Name:    "refreshToken",
+			Path:    "/",
+			Path:    "/",
 			Value:   response["refreshToken"].(string),
 			Expires: time.Now().Add(time.Hour * 24 * 7),
 		})
@@ -724,11 +727,13 @@ func (h Handler) OauthHandler(w http.ResponseWriter, r *http.Request) {
 		//!should set domain and path
 		http.SetCookie(w, &http.Cookie{
 			Name:    "accessToken",
+			Path:    "/",
 			Value:   response["accessToken"].(string),
 			Expires: time.Now().Add(time.Hour),
 		})
 		http.SetCookie(w, &http.Cookie{
 			Name:    "refreshToken",
+			Path:    "/",
 			Value:   response["refreshToken"].(string),
 			Expires: time.Now().Add(time.Hour * 24 * 7),
 		})
@@ -879,6 +884,52 @@ func (h Handler) NewTokenPairFromRefreshTokenHandler(w http.ResponseWriter, r *h
 		"refreshToken": newRefreshToken,
 	}
 	resp.SuccessParse(w, http.StatusOK, "New token pair generated", response)
+}
+
+//!===========================PAGES HANDLERS
+
+//homepage handler
+func (h Handler) HomePageHandler(w http.ResponseWriter, r *http.Request) {
+	//return the home html page
+	http.ServeFile(w, r, "./pages/home.html")
+}
+
+func (h Handler) LoginPageHandler(w http.ResponseWriter, r *http.Request) {
+	//return the login html page
+	http.ServeFile(w, r, "./pages/login.html")
+}
+
+func (h Handler) UserPageHandler(w http.ResponseWriter, r *http.Request) {
+
+	//get the access token from the cookie
+	cookie, err := r.Cookie("accessToken")
+	if err != nil {
+		if err == http.ErrNoCookie {
+			resp.Error(w, http.StatusBadRequest, "No access token")
+			return
+		}
+		resp.Error(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	accessToken := cookie.Value
+
+	db, err := connectToDB()
+	if err != nil {
+		resp.Error(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	defer db.Close()
+
+	//get the student generic infos from the access token
+	student, err := GetUserFromAccessToken(accessToken, db)
+	fmt.Println("studente:", student)
+	if err != nil {
+		resp.Error(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	//return the user html page
+	http.ServeFile(w, r, "./pages/user.html")
 }
 
 //constructor
