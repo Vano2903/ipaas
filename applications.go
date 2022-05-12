@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/go-connections/nat"
 )
@@ -79,10 +78,6 @@ func (c ContainerController) CreateNewApplicationFromRepo(creatorID int, port, n
 	containerBody, err := c.cli.ContainerCreate(c.ctx, containerConfig,
 		hostConfig, nil, nil, fmt.Sprintf("%d-%s-%s", creatorID, name, language))
 	if err != nil {
-		return "", err
-	}
-
-	if err := c.cli.ContainerStart(c.ctx, containerBody.ID, types.ContainerStartOptions{}); err != nil {
 		return "", err
 	}
 
