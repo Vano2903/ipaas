@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/docker/docker/api/types"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/sessions"
 	resp "github.com/vano2903/ipaas/responser"
@@ -209,6 +210,9 @@ func (h Handler) NewApplicationHandler(w http.ResponseWriter, r *http.Request) {
 		resp.Errorf(w, http.StatusInternalServerError, "error downloading the repo, try again in one minute: %v", err.Error())
 		return
 	}
+	fmt.Println("repo: ", repo)
+	fmt.Println("name: ", name)
+	fmt.Println("hash: ", hash)
 
 	//port to expose for the app
 	port, err := strconv.Atoi(appPost.Port)
@@ -234,6 +238,18 @@ func (h Handler) NewApplicationHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	//remove the image created
+	err = h.cc.RemoveImage(imageID)
+	if err != nil {
+		resp.Errorf(w, http.StatusInternalServerError, "error removing the image: %v", err.Error())
+		return
+	}
+
+	if err := h.cc.cli.ContainerStart(h.cc.ctx, id, types.ContainerStartOptions{}); err != nil {
+		resp.Errorf(w, http.StatusInternalServerError, "error starting the container: %v", err.Error())
+		return
+	}
+
 	//remove the repo after creating the application
 	err = os.RemoveAll(repo)
 	if err != nil {
@@ -254,13 +270,6 @@ func (h Handler) NewApplicationHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	fmt.Println("status:", status)
-
-	//remove the image created
-	err = h.cc.RemoveImage(imageID)
-	if err != nil {
-		resp.Errorf(w, http.StatusInternalServerError, "error removing the image: %v", err.Error())
-		return
-	}
 
 	//add a new database application created by the student (student id)
 	insertApplicationQuery := `
@@ -722,6 +731,11 @@ func (h Handler) OauthHandler(w http.ResponseWriter, r *http.Request) {
 			Name:    "refreshToken",
 			Value:   response["refreshToken"].(string),
 			Expires: time.Now().Add(time.Hour * 24 * 7),
+		})
+		http.SetCookie(w, &http.Cookie{
+			Name:    "ipaas-session",
+			Value:   "",
+			Expires: time.Unix(0, 0),
 		})
 		resp.SuccessParse(w, http.StatusOK, "Token generated", response)
 		return
