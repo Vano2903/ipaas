@@ -2,7 +2,9 @@
 <html lang="en">
 
 <head>
-    <title>IPAAS</title>
+    <title>
+        IPAAS
+    </title>
     <!-- Required meta tags -->
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
@@ -13,7 +15,7 @@
 </head>
 
 <body>
-    <button onclick="oauth()">OAUTH WITH PALEOID YOYOYO</button>
+    COSA É IPAAS, UNA COSA MOLTO BELLA
     <!-- Optional JavaScript -->
     <!-- jQuery first, then Popper.js, then Bootstrap JS -->
     <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js"
@@ -25,23 +27,6 @@
     <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js"
         integrity="sha384-JjSmVgyd0p3pXB1rRibZUAYoIIy6OrQ6VrjIEaFf/nJGzIxFDsf4x0xIM+B07jRM"
         crossorigin="anonymous"></script>
-    <script>
-        async function oauth() {
-            //make fetch to /oauth
-            let resp = await fetch('/api/oauth', {
-                method: 'GET',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-            })
-            let data = await resp.json()
-            if (data.error) {
-                alert(data.error)
-            } else {
-                window.location.href = data.msg
-            }
-        }
-    </script>
 </body>
 
 </html>
