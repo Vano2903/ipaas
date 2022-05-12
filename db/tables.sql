@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS `applications` (
     `name` varchar(255) NOT NULL,
     `description` TEXT NOT NULL,
     `githubRepo` varchar(255),
-    `lastCommit` varchar(20),
+    `lastCommit` varchar(40),
     `branch` varchar(255),
     `port` varchar(5),
     `language` varchar(255),
