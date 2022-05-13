@@ -18,9 +18,20 @@ function transition(from, to) {
 }
 
 function logout() {
-    localStorage.removeItem("rememberMe");
-    localStorage.removeItem("user")
-    location.reload();
+    //remove accessToken and refreshToken from cookie
+    document.cookie = "accessToken=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+    document.cookie = "refreshToken=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+    window.location.href = "/login";
+};
+
+function logoutconfirm(x) {
+    if (x) {
+        document.querySelector("#logoutconfirm").style.display = "flex";
+        console.log("vedi");
+    } else {
+        document.querySelector("#logoutconfirm").style.display = "none";
+        console.log("nasc");
+    }
 };
 
 /*######## add document #########*/
@@ -28,51 +39,19 @@ let lastPressed;
 
 $("#inputFile").css('display', 'none');
 
-function genDocuments(array) {
-    let high = document.querySelector("#documents > #high")
-    high.innerHTML = ""
-    array.forEach(doc => {
-        let div = document.createElement("div")
-        div.setAttribute("id", doc.id)
-        div.setAttribute("class", "doc")
-        let p = document.createElement("p")
-        p.innerHTML = doc.type
-        let img = document.createElement("img")
-        img.setAttribute("src", doc.url)
-        div.appendChild(p)
-        div.appendChild(img)
-        high.appendChild(div)
-    });
-}
-
-async function docrefresh() {
-    const res = await fetch('/document/get/all', {
-        method: "POST",
-        headers: {
-            'Accept': 'application/json',
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(user)
-    });
-
-    const documents = await res.json();
-    genDocuments(documents)
-}
-
 function adddoctoggle() {
     document.querySelector("#adddoc").classList.toggle("open");
-    if (document.querySelector("#adddoc").classList.contains("open"))
+    document.querySelector("#adddoc2").classList.toggle("open");
+    if (document.querySelector("#adddoc").classList.contains("open") || document.querySelector("#adddoc2").classList.contains("open")) {
         document.querySelector("#adddoc>h1").innerHTML = "-";
-    else
+        document.querySelector("#adddoc2>h1").innerHTML = "-";
+    } else {
         document.querySelector("#adddoc>h1").innerHTML = "+";
+        document.querySelector("#adddoc2>h1").innerHTML = "+";
+    }
 }
 
 function adddoc(type) {
     lastPressed = type;
     $("#inputFile").trigger('click');
 }
-
-$("#inputFile").on('change', async function () {
-    await uploadInfo(lastPressed)
-    docrefresh()
-});
