@@ -1,97 +1,167 @@
-/*######## SETUP HOMEPAGE #########*/
-setuphomepage();
+// loadDatabases();
+// loadApplications();
 
-async function setuphomepage() {
-    //se ho viaggi in programma
-    // // let travel = await gettravel();
-    // if (travel !== undefined) {
-    //     //se mancano dei documenti
-    //     if (docsmissing()) {
-    //         document.querySelector("#c_check").style.display = "block";
-    //         document.querySelector("#c_newtravel").style.display = "none";
-    //     } else {
-    //         document.querySelector("#c_travel").style.display = "block";
-    //     }
-    // } else { //se non ho viaggi in programma
-    //     document.querySelector("#c_newtravel").style.display = "block";
-    //     document.querySelector("#c_check").style.display = "none";
-    // }
-}
-
-/*######## UPLOAD DOCUMENTS #########*/
-
-async function uploadFile() {
-    // const formData = new FormData();
-    // let file = document.getElementById("inputFile").files[0]
-    // formData.append("document", file);
-    // const response = await fetch("/upload/file", {
-    //     method: 'POST',
-    //     body: formData
-    // });
-    // let resp = await response.json();
-    // console.log(resp)
-    // return {
-    //     id: resp.fileID, name: file.name
-    // }
-}
-
-async function uploadInfo(type) {
-    // let fileData = await uploadFile()
-    // console.log(fileData)
-    // let body = {
-    //     user: user,
-    //     documentInfo: {
-    //         id: fileData.id,
-    //         title: fileData.name,
-    //         type: type
-    //     }
-    // }
-    // console.log(body)
-
-    // const response = await fetch("/upload/info/" + fileData.id, {
-    //     method: 'POST',
-    //     body: JSON.stringify(body)
-    // });
-    // let resp = await response.json();
-    // console.log(resp)
-}
-
-/*######## TRAVEL #########*/
-
-// async function newtravel() {
-//     let travel = document.querySelector("#travelDestination").value; // 
-//     const response = await fetch("/travel/update", {
-//         method: 'POST',
-//         body: JSON.stringify(user)
-//     });
-//     const resp = await response.json();
-//     user.travelTo = travel;
-//     console.log(resp);
-//     setuphomepage();
-// }
-
-// async function gettravel() {
-//     const response = await fetch("/travel/get", {
-//         method: 'POST',
-//         body: JSON.stringify(user)
-//     });
-//     const resp = await response.json();
-//     console.log(resp)
-//     return resp.travel
-// }
-
-function docsmissing() {
-    /*
-    let req;
-    displays.forEach(element => {
-        let travel = await gettravel();
-        if(element.name==travel){
-            req=element;
+async function loadDatabases() {
+    const res = await fetch('/api/user/getApps/database');
+    const dbs = await res.json();
+    if (dbs.error) {
+        if (apps.code == 498) {
+            newTokenPair(loadDatabases);
         }
+        alert(dbs.error);
+        return
+    }
+    //generate the databases
+    if (dbs.data === null) {
+        document.getElementById('databasesContainer').innerHTML += '<center><h3>You have no databases</h3></center>';
+        return
+    }
+
+    document.getElementById('databasesContainer').innerHTML = "";
+    for (let i = 0; i < dbs.data.length; i++) {
+        const db = dbs.data[i];
+
+        const dbDiv = document.createElement('div');
+        dbDiv.id = db.containerID;
+        dbDiv.className = 'doc';
+
+        const name = document.createElement('p');
+        name.innerText = db.name;
+
+        const exportBtn = document.createElement('button');
+        exportBtn.type = "button";
+        exportBtn.className = "btn btn-info";
+        exportBtn.innerText = "Export";
+        exportBtn.disabled = true
+        // exportBtn.onclick = exportDB(db.containerID);
+
+        const deleteBtn = document.createElement('button');
+        deleteBtn.type = "button";
+        deleteBtn.className = "btn btn-danger";
+        deleteBtn.innerText = "Delete";
+        deleteBtn.setAttribute("onclick", "deleteContainer('" + db.containerID + "')")
+
+
+        dbDiv.appendChild(name);
+        dbDiv.appendChild(exportBtn);
+        dbDiv.appendChild(deleteBtn);
+
+        document.getElementById('databasesContainer').appendChild(dbDiv);
+    }
+}
+
+async function deleteContainer(containerId) {
+    const res = await fetch('/api/container/delete/' + containerId, {
+        method: 'DELETE'
     });
-    let missing=1;
-    
-    user.documents
-    if(req.id )*/
-    return true;
+    const data = await res.json();
+    if (data.error) {
+        if (apps.code == 498) {
+            newTokenPair(deleteContainer, containerId);
+        }
+        alert(data.error);
+        return
+    }
+    //remove the container from the DOM
+    document.getElementById(containerId).remove();
+}
+
+async function loadApplications() {
+    const res = await fetch('/api/user/getApps/web');
+    const apps = await res.json();
+    if (apps.error) {
+        if (apps.code == 498) {
+            newTokenPair(loadApplications);
+        }
+        alert(apps.error);
+        return
+    }
+
+    if (apps.data === null) {
+        document.getElementById('applicationsContainer').innerHTML = '<center><h3>You have no applications</h3></center>';
+        return
+    }
+    document.getElementById('applicationsContainer').innerHTML = "";
+    for (let i = 0; i < apps.data.length; i++) {
+        const app = apps.data[i];
+
+        const appDiv = document.createElement('div');
+        appDiv.id = app.containerID;
+        appDiv.className = 'doc';
+
+        const name = document.createElement('p');
+        name.innerHTML = `<a target="_blank" href="http://${app.externalPort}">${app.name}</a>`;
+
+        const publicBtn = document.createElement('button');
+        publicBtn.id = "public" + app.containerID;
+        publicBtn.type = "button";
+        if (app.isPublic) {
+            publicBtn.className = "btn btn-warning";
+            publicBtn.innerText = "Make private";
+            publicBtn.setAttribute("onclick", "makePrivate('" + app.containerID + "')");
+        } else {
+            publicBtn.className = "btn btn-info";
+            publicBtn.innerText = "Make public";
+            publicBtn.setAttribute("onclick", "makePublic('" + app.containerID + "')")
+        }
+
+        const deleteBtn = document.createElement('button');
+        deleteBtn.type = "button";
+        deleteBtn.className = "btn btn-danger";
+        deleteBtn.innerText = "Delete";
+        deleteBtn.setAttribute("onclick", "deleteContainer('" + app.containerID + "')")
+
+        const hr = document.createElement('hr');
+
+        const desc = document.createElement('h5');
+        desc.innerText = app.description;
+
+        appDiv.appendChild(name);
+        appDiv.appendChild(publicBtn);
+        appDiv.appendChild(deleteBtn);
+        appDiv.appendChild(hr);
+        appDiv.appendChild(desc);
+
+        document.getElementById('applicationsContainer').appendChild(appDiv);
+    }
+}
+
+async function makePublic(containerId) {
+    const res = await fetch('/api/container/publish/' + containerId, {
+    });
+    const data = await res.json();
+    if (data.error) {
+        if (apps.code == 498) {
+            newTokenPair(makePublic, containerId);
+        }
+        alert(data.error);
+        return
+    }
+    document.getElementById("public" + containerId).className = "btn btn-warning";
+    document.getElementById("public" + containerId).innerText = "Make private";
+    document.getElementById("public" + containerId).setAttribute("onclick", "makePrivate('" + containerId + "')");
+}
+
+async function makePrivate(containerId) {
+    const res = await fetch('/api/container/revoke/' + containerId, {
+    });
+    const data = await res.json();
+    if (data.error) {
+        if (apps.code == 498) {
+            newTokenPair(makePublic, containerId);
+        }
+        alert(data.error);
+        return
+    }
+    document.getElementById("public" + containerId).className = "btn btn-info";
+    document.getElementById("public" + containerId).innerText = "Make public";
+    document.getElementById("public" + containerId).setAttribute("onclick", "makePublic('" + containerId + "')");
+}
+
+function create(what) {
+    if (what == "db") {
+        window.location.href = "/user/database/new";
+    } else {
+        window.location.href = "/user/application/new";
+    }
 }
