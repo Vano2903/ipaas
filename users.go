@@ -27,11 +27,12 @@ type StudentInfo struct {
 //get student struct from the id (matricola)
 func GetStudentFromID(userID int, connection *sql.DB) (Student, error) {
 	var student Student
-	err := connection.QueryRow("SELECT * FROM student WHERE userID = ?", userID).Scan(
+	err := connection.QueryRow("SELECT * FROM users WHERE userID = ?", userID).Scan(
 		&student.ID,
 		&student.Name,
 		&student.LastName,
 		&student.Email,
+		&student.Pfp,
 	)
 	if err != nil {
 		return student, err
