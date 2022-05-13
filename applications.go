@@ -28,6 +28,7 @@ type Application struct {
 	GithubRepo     string    `json:"githubRepo"`
 	LastCommitHash string    `json:"lastCommitHash"`
 	Port           string    `json:"port"`
+	ExternalPort   string    `json:"externalPort"`
 	Lang           string    `json:"lang"`
 	CreatedAt      time.Time `json:"createdAt"`
 	IsPublic       bool      `json:"isPublic"`
