@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS `applications` (
     `lastCommit` varchar(40),
     `branch` varchar(255),
     `port` varchar(5),
+    `externalPort` varchar(5),
     `language` varchar(255),
     `createdAt` datetime DEFAULT CURRENT_TIMESTAMP NOT NULL,
     `isPublic` tinyint(1) NOT NULL DEFAULT '0',
