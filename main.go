@@ -18,8 +18,10 @@ import (
 
 *endpoints for student pages:
 /user/ -> user area
-/user/application/new -> new application page
-/user/database/new -> new database page
+/user/application/new -> page to create a new application
+/user/database/new -> page to create a new database
+! not implemented as pages  /user/application/new -> new application page
+! not implemented as pages  /user/database/new -> new database page
 
 !API ENDPOINTS:
 *public api endpoints:
@@ -32,15 +34,17 @@ import (
 /api/user/ -> get the info of the user
 /api/user/getApps/{type} -> get all the applications of a user (private or public)
 
+*container api endpoints:
+/api/container/delete/{containerID} -> delete a container
+/api/container/publish/{containerID} -> publish a container
+/api/container/revoke/{containerID} -> revoke a container
+
 *api endpoints for database:
 /api/db/new -> create a new database
-/api/db/delete/{containerID} -> delete a database
-/api/db/delete/{containerID} -> delete a database
 ! not implemented /api/db/export/{containerID}/{dbName} -> export a database
 
 *api endpoints for applications:
 /api/app/new -> create a new application
-/api/app/delete/{containerID} -> delete an application
 /api/app/update/{containerID} -> update an application if the repo is changed
 */
 
@@ -50,19 +54,18 @@ func main() {
 
 	mainRouter.HandleFunc("/", handler.HomePageHandler)
 	mainRouter.HandleFunc("/login", handler.LoginPageHandler)
-	// mainRouter.HandleFunc("/{studentID}", handler.PublicStudentPageHandler)
+	mainRouter.HandleFunc("/{studentID}", handler.PublicStudentPageHandler)
 	// mainRouter.HandleFunc("/{studentID}/{appID}", handler.PublicAppPageHandler)
+	mainRouter.HandleFunc("/user/", handler.UserPageHandler).Methods("GET")
 
 	//user's router with access token middleware
 	userAreaRouter := mainRouter.PathPrefix("/user").Subrouter()
 	//set middleware on user area router
 	userAreaRouter.Use(handler.TokensMiddleware)
-	//homepage
-	userAreaRouter.HandleFunc("/", handler.UserPageHandler).Methods("GET")
 	//page to create a new application
-	// userAreaRouter.HandleFunc("/application/new", handler.NewAppPageHandler).Methods("GET")
+	userAreaRouter.HandleFunc("/application/new", handler.NewAppPageHandler).Methods("GET")
 	//page to create a new database
-	// userAreaRouter.HandleFunc("/database/new", handler.NewDatabasePageHandler).Methods("GET")
+	userAreaRouter.HandleFunc("/database/new", handler.NewDatabasePageHandler).Methods("GET")
 
 	//!API HANDLERS
 	api := mainRouter.PathPrefix("/api").Subrouter()
@@ -76,12 +79,21 @@ func main() {
 	//! USER HANDLERS
 	userApiRouter := api.PathPrefix("/user").Subrouter()
 	userApiRouter.Use(handler.TokensMiddleware)
-
 	//get the user data
 	//still kinda don't know what to do with this one, will probably return the homepage
 	userApiRouter.HandleFunc("/", handler.LoginHandler).Methods("GET")
 	//get all the applications (even the private one) must define the type (database, web, all)
 	userApiRouter.HandleFunc("/getApps/{type}", handler.GetAllApplicationsOfStudentPrivate).Methods("GET")
+
+	//! CONTAINER HANDLERS
+	containerApiRouter := api.PathPrefix("/container").Subrouter()
+	containerApiRouter.Use(handler.TokensMiddleware)
+	//delete a container
+	containerApiRouter.HandleFunc("/delete/{containerID}", handler.DeleteApplicationHandler).Methods("DELETE")
+	//publish a container
+	containerApiRouter.HandleFunc("/publish/{containerID}", handler.PublishApplicationHandler).Methods("GET")
+	//revoke a container
+	containerApiRouter.HandleFunc("/revoke/{containerID}", handler.RevokeApplicationHandler).Methods("GET")
 
 	//! DBaaS HANDLERS
 	//DBaaS router (subrouter of user area router so it has access token middleware)
@@ -89,16 +101,14 @@ func main() {
 	dbApiRouter.Use(handler.TokensMiddleware)
 	//let the user create a new database
 	dbApiRouter.HandleFunc("/new", handler.NewDBHandler).Methods("POST")
-	//delete a database
-	dbApiRouter.HandleFunc("/delete/{containerID}", handler.DeleteApplicationHandler).Methods("DELETE")
-	// dbApiRouter.HandleFunc("/export/{containerID}/{dbName}")
+	//export a database
+	//dbApiRouter.HandleFunc("/export/{containerID}/{dbName}")
 
 	//! APPLICATIONS HANDLERS
 	//application router, it's the main part of the application
 	appApiRouter := api.PathPrefix("/app").Subrouter()
 	appApiRouter.Use(handler.TokensMiddleware)
 	appApiRouter.HandleFunc("/new", handler.NewApplicationHandler).Methods("POST")
-	appApiRouter.HandleFunc("/delete/{containerID}", handler.DeleteApplicationHandler).Methods("DELETE")
 	appApiRouter.HandleFunc("/update/{containerID}", handler.UpdateApplicationHandler).Methods("POST")
 
 	server := &http.Server{
