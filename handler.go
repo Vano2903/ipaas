@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"html/template"
 	"log"
 	"net/http"
 	"os"
@@ -142,11 +143,11 @@ func (h Handler) NewDBHandler(w http.ResponseWriter, r *http.Request) {
 
 	//add a new database application created by the student (student id)
 	insertApplicationQuery := `
-	INSERT INTO applications (containerID, status, studentID, type, name, description) VALUES (?, ?, ?, ?, ?, ?)
+	INSERT INTO applications (containerID, status, studentID, type, name, description, port, externalPort) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
 	//exec the query, the status will be up and type database, the name will follow the nomenclature of <studentID>:<dbType>/<dbName>
-	_, err = conn.Exec(insertApplicationQuery, id, "up", student.ID, "database", fmt.Sprintf("%d:%s/%s", student.ID, dbPost.DbType, dbPost.DbName), "")
+	_, err = conn.Exec(insertApplicationQuery, id, "up", student.ID, "database", fmt.Sprintf("%d:%s/%s", student.ID, dbPost.DbType, dbPost.DbName), "", h.cc.dbContainersConfigs[dbPost.DbType].port, port)
 	if err != nil {
 		resp.Errorf(w, http.StatusInternalServerError, "unable to link the application to the user: %v", err.Error())
 		return
@@ -161,7 +162,7 @@ func (h Handler) NewDBHandler(w http.ResponseWriter, r *http.Request) {
 		"pass":      password,
 	}
 	if dbPost.DbType == "mongodb" {
-		json["uri"] = fmt.Sprintf("mongodb://root:%s@%s:%s", password, "127.0.0.1", port)
+		json["uri"] = fmt.Sprintf("mongodb://root:%s@%s:%s", password, os.Getenv("IP"), port)
 	}
 	resp.SuccessParse(w, http.StatusOK, "New DB created", json)
 }
@@ -274,12 +275,11 @@ func (h Handler) NewApplicationHandler(w http.ResponseWriter, r *http.Request) {
 	//add a new database application created by the student (student id)
 	insertApplicationQuery := `
 	INSERT INTO applications 
-	(containerID, status, studentID, type, name, description, githubRepo, lastCommit, port, language) 
-	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`
+	(containerID, status, studentID, type, name, description, githubRepo, lastCommit, port, language, externalPort) 
+	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	//exec the query, the status will be up and type database, the name will follow the nomenclature of <studentID>:<dbType>/<dbName>
-	app, err := conn.Exec(insertApplicationQuery, id, status, student.ID, "web", imageName, appPost.Description, appPost.GithubRepoUrl, hash, appPost.Port, appPost.Language)
+	app, err := conn.Exec(insertApplicationQuery, id, status, student.ID, "web", imageName, appPost.Description, appPost.GithubRepoUrl, hash, appPost.Port, appPost.Language, exernalPort)
 	if err != nil {
 		resp.Errorf(w, http.StatusInternalServerError, "unable to link the application to the user: %v", err.Error())
 		return
@@ -302,7 +302,7 @@ func (h Handler) NewApplicationHandler(w http.ResponseWriter, r *http.Request) {
 
 	toSend := map[string]interface{}{
 		"container id":  id,
-		"external port": "127.0.0.1:" + exernalPort,
+		"external_port": os.Getenv("IP") + ":" + exernalPort,
 		"status":        status,
 	}
 
@@ -330,9 +330,10 @@ func (h Handler) DeleteApplicationHandler(w http.ResponseWriter, r *http.Request
 	}
 
 	//get the application from the database and check if it's owned by the student
-	var app Application
-	var tmp, githubRepo, LastCommitHash, port, Lang sql.NullString
-	err = conn.QueryRow(`SELECT * FROM applications WHERE studentID = ? AND containerID = ?`, student.ID, containerID).Scan(&app.ID, &app.ContainerID, &app.Status, &app.StudentID, &app.Type, &app.Name, &app.Description, &githubRepo, &LastCommitHash, &tmp, &port, &Lang, &app.CreatedAt, &app.IsPublic)
+	// var app Application
+	// var tmp, githubRepo, LastCommitHash, port, Lang sql.NullString
+	var id int
+	err = conn.QueryRow(`SELECT id FROM applications WHERE studentID = ? AND containerID = ?`, student.ID, containerID).Scan(&id)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			resp.Errorf(w, http.StatusBadRequest, "application not found, the application might have the wrong container id or you dont own it")
@@ -341,10 +342,6 @@ func (h Handler) DeleteApplicationHandler(w http.ResponseWriter, r *http.Request
 		resp.Errorf(w, http.StatusInternalServerError, "error getting the application: %v", err.Error())
 		return
 	}
-	app.GithubRepo = githubRepo.String
-	app.LastCommitHash = LastCommitHash.String
-	app.Port = port.String
-	app.Lang = Lang.String
 
 	//delete the container
 	err = h.cc.DeleteContainer(containerID)
@@ -360,7 +357,7 @@ func (h Handler) DeleteApplicationHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	_, err = conn.Exec(`DELETE FROM envs WHERE applicationID = ?`, app.ID)
+	_, err = conn.Exec(`DELETE FROM envs WHERE applicationID = ?`, id)
 	if err != nil {
 		resp.Errorf(w, http.StatusInternalServerError, "error deleting the envs: %v", err.Error())
 		return
@@ -528,7 +525,7 @@ func (h Handler) UpdateApplicationHandler(w http.ResponseWriter, r *http.Request
 
 	toSend := map[string]interface{}{
 		"container id":  id,
-		"external port": "127.0.0.1:" + exernalPort,
+		"external port": os.Getenv("IP") + ":" + exernalPort,
 		"status":        status,
 	}
 
@@ -580,9 +577,9 @@ func (h Handler) GetAllApplicationsOfStudentPrivate(w http.ResponseWriter, r *ht
 	var applications []Application
 	for rows.Next() {
 		var app Application
-		var tmp, githubRepo, LastCommitHash, port, Lang sql.NullString
+		var tmp, githubRepo, LastCommitHash, port, Lang, externalPort sql.NullString
 
-		err = rows.Scan(&app.ID, &app.ContainerID, &app.Status, &app.StudentID, &app.Type, &app.Name, &app.Description, &githubRepo, &LastCommitHash, &tmp, &port, &Lang, &app.CreatedAt, &app.IsPublic)
+		err = rows.Scan(&app.ID, &app.ContainerID, &app.Status, &app.StudentID, &app.Type, &app.Name, &app.Description, &githubRepo, &LastCommitHash, &tmp, &port, &externalPort, &Lang, &app.CreatedAt, &app.IsPublic)
 		if err != nil {
 			resp.Errorf(w, http.StatusInternalServerError, "error getting the applications: %v", err.Error())
 			return
@@ -591,6 +588,7 @@ func (h Handler) GetAllApplicationsOfStudentPrivate(w http.ResponseWriter, r *ht
 		app.LastCommitHash = LastCommitHash.String
 		app.Port = port.String
 		app.Lang = Lang.String
+		app.ExternalPort = os.Getenv("IP") + ":" + externalPort.String
 		applications = append(applications, app)
 	}
 
@@ -611,7 +609,7 @@ func (h Handler) GetAllApplicationsOfStudentPublic(w http.ResponseWriter, r *htt
 	defer conn.Close()
 
 	//get all the public web applications of the student
-	rows, err := conn.Query("SELECT * FROM applications WHERE type = 'web' AND isPulic = 1 AND studentID = ?", studentID)
+	rows, err := conn.Query("SELECT * FROM applications WHERE type = 'web' AND isPublic = 1 AND studentID = ?", studentID)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			resp.Error(w, http.StatusNotFound, "No applications found, check if the student id is correct")
@@ -625,9 +623,9 @@ func (h Handler) GetAllApplicationsOfStudentPublic(w http.ResponseWriter, r *htt
 	var applications []Application
 	for rows.Next() {
 		var app Application
-		var tmp, githubRepo, LastCommitHash, port, Lang sql.NullString
+		var tmp, githubRepo, LastCommitHash, port, Lang, externalPort sql.NullString
 
-		err = rows.Scan(&app.ID, &app.ContainerID, &app.Status, &app.StudentID, &app.Type, &app.Name, &app.Description, &githubRepo, &LastCommitHash, &tmp, &port, &Lang, &app.CreatedAt, &app.IsPublic)
+		err = rows.Scan(&app.ID, &app.ContainerID, &app.Status, &app.StudentID, &app.Type, &app.Name, &app.Description, &githubRepo, &LastCommitHash, &tmp, &port, &externalPort, &Lang, &app.CreatedAt, &app.IsPublic)
 		if err != nil {
 			resp.Errorf(w, http.StatusInternalServerError, "error getting the applications: %v", err.Error())
 			return
@@ -636,9 +634,93 @@ func (h Handler) GetAllApplicationsOfStudentPublic(w http.ResponseWriter, r *htt
 		app.LastCommitHash = LastCommitHash.String
 		app.Port = port.String
 		app.Lang = Lang.String
+		app.ExternalPort = os.Getenv("IP") + ":" + externalPort.String
 		applications = append(applications, app)
 	}
 	resp.SuccessParse(w, http.StatusOK, "Public applications of "+studentID, applications)
+}
+
+func (h Handler) PublishApplicationHandler(w http.ResponseWriter, r *http.Request) {
+	//get the student from the cookies, get the application from the database
+	//check if the student is the owner of the application, if so update the scope to public
+
+	containerId := mux.Vars(r)["containerID"]
+	//connect to database
+	conn, err := connectToDB()
+	if err != nil {
+		resp.Errorf(w, http.StatusInternalServerError, "error connecting to the database: %v", err.Error())
+		return
+	}
+
+	//get the student from the cookies
+	student, err := h.util.GetUserFromCookie(r, conn)
+	if err != nil {
+		resp.Errorf(w, http.StatusInternalServerError, "error getting the user from cookies: %v", err.Error())
+		return
+	}
+
+	//get the application from the database
+
+	var id int
+	err = conn.QueryRow("SELECT id FROM applications WHERE containerID = ? AND studentID = ?", containerId, student.ID).Scan(&id)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			resp.Error(w, http.StatusNotFound, "No application found, check if the container id is correct or make sure you own this container")
+			return
+		}
+		resp.Errorf(w, http.StatusInternalServerError, "error getting the application: %v", err.Error())
+		return
+	}
+
+	//update the scope to public
+	_, err = conn.Exec("UPDATE applications SET isPublic = 1 WHERE containerID = ?", containerId)
+	if err != nil {
+		resp.Errorf(w, http.StatusInternalServerError, "error updating the application: %v", err.Error())
+		return
+	}
+
+	resp.Success(w, http.StatusOK, "Application published")
+}
+
+func (h Handler) RevokeApplicationHandler(w http.ResponseWriter, r *http.Request) {
+	//get the student from the cookies, get the application from the database
+	//check if the student is the owner of the application, if so update the scope to public
+
+	containerId := mux.Vars(r)["containerID"]
+	//connect to database
+	conn, err := connectToDB()
+	if err != nil {
+		resp.Errorf(w, http.StatusInternalServerError, "error connecting to the database: %v", err.Error())
+		return
+	}
+
+	//get the student from the cookies
+	student, err := h.util.GetUserFromCookie(r, conn)
+	if err != nil {
+		resp.Errorf(w, http.StatusInternalServerError, "error getting the user from cookies: %v", err.Error())
+		return
+	}
+
+	//get the application from the database
+	var id int
+	err = conn.QueryRow("SELECT id FROM applications WHERE containerID = ? AND studentID = ?", containerId, student.ID).Scan(&id)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			resp.Error(w, http.StatusNotFound, "No application found, check if the container id is correct or make sure you own this container")
+			return
+		}
+		resp.Errorf(w, http.StatusInternalServerError, "error getting the application: %v", err.Error())
+		return
+	}
+
+	//update the scope to public
+	_, err = conn.Exec("UPDATE applications SET isPublic = 0 WHERE containerID = ?", containerId)
+	if err != nil {
+		resp.Errorf(w, http.StatusInternalServerError, "error updating the application: %v", err.Error())
+		return
+	}
+
+	resp.Success(w, http.StatusOK, "Application published")
 }
 
 //!===========================GENERICS HANDLERS
@@ -899,25 +981,85 @@ func (h Handler) LoginPageHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h Handler) UserPageHandler(w http.ResponseWriter, r *http.Request) {
-
-	//get the access token from the cookie
-	cookie, err := r.Cookie("accessToken")
-	if err != nil {
-		if err == http.ErrNoCookie {
-			resp.Error(w, http.StatusBadRequest, "No access token")
-			return
-		}
-		resp.Error(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-	accessToken := cookie.Value
-
 	db, err := connectToDB()
 	if err != nil {
 		resp.Error(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	defer db.Close()
+
+	//get the access token from the cookie
+	cookie, err := r.Cookie("accessToken")
+	if err != nil {
+		if err == http.ErrNoCookie {
+			//new token pair
+			cookie, err := r.Cookie("refreshToken")
+			if err != nil {
+				if err == http.ErrNoCookie {
+					resp.Error(w, http.StatusBadRequest, "No refresh token")
+					return
+				}
+				resp.Error(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			refreshToken := cookie.Value
+
+			//check if there is a refresh token
+			if refreshToken == "" {
+				resp.Error(w, 498, "No refresh token, do login again")
+				return
+			}
+
+			//check if the refresh token is expired
+			if IsTokenExpired(false, refreshToken, db) {
+				//!should redirect to the oauth page
+				resp.Error(w, 498, "Refresh token is expired")
+				return
+			}
+
+			//generate a new token pair
+			accessToken, newRefreshToken, err := GenerateNewTokenPairFromRefreshToken(refreshToken, db)
+			if err != nil {
+				resp.Error(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+
+			//delete the old tokens from the cookies
+			http.SetCookie(w, &http.Cookie{
+				Name:    "accessToken",
+				Path:    "/",
+				Value:   "",
+				Expires: time.Unix(0, 0),
+			})
+			http.SetCookie(w, &http.Cookie{
+				Name:    "refreshToken",
+				Path:    "/",
+				Value:   "",
+				Expires: time.Unix(0, 0),
+			})
+
+			//set the new tokens
+			//!should set domain and path
+			http.SetCookie(w, &http.Cookie{
+				Name:    "accessToken",
+				Path:    "/",
+				Value:   accessToken,
+				Expires: time.Now().Add(time.Hour),
+			})
+			http.SetCookie(w, &http.Cookie{
+				Name:    "refreshToken",
+				Path:    "/",
+				Value:   newRefreshToken,
+				Expires: time.Now().Add(time.Hour * 24 * 7),
+			})
+			//make the user refresh the page
+			http.Redirect(w, r, "/user/", http.StatusFound)
+			return
+		}
+		resp.Error(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	accessToken := cookie.Value
 
 	//get the student generic infos from the access token
 	student, err := GetUserFromAccessToken(accessToken, db)
@@ -927,8 +1069,133 @@ func (h Handler) UserPageHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	//return the user html page
-	http.ServeFile(w, r, "./pages/user.html")
+	//load page with the student info
+	//template
+	t, err := template.ParseFiles("./pages/user.html")
+	if err != nil {
+		resp.Error(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	// var rows *sql.Rows
+	// rows, err = db.Query("SELECT containerID, type, name, description, isPublic FROM applications WHERE studentID = ?", student.ID)
+	// if err != nil {
+	// 	resp.Errorf(w, http.StatusInternalServerError, "error getting the applications: %v", err.Error())
+	// 	return
+	// }
+
+	// //parse the rows into a []Application and return it
+	// var applications []Application
+	// var databases []Application
+	// for rows.Next() {
+	// 	var app Application
+	// 	err = rows.Scan(&app.ContainerID, &app.Type, &app.Name, &app.Description, &app.IsPublic)
+	// 	if err != nil {
+	// 		resp.Errorf(w, http.StatusInternalServerError, "error getting the applications: %v", err.Error())
+	// 		return
+	// 	}
+	// 	if app.Type == "database" {
+	// 		databases = append(databases, app)
+	// 	} else {
+	// 		applications = append(applications, app)
+	// 	}
+	// }
+
+	// var appHTMLString string
+	// var dbHTMlstring string
+
+	// //parse the applications into html
+	// for _, app := range applications {
+	// 	var btn string
+	// 	if app.IsPublic {
+	// 		btn = `<button type="button" onclick="makePrivate('%s') class="btn btn-warning">Make private</button>`
+	// 	} else {
+	// 		btn = `<button type="button" onclick="makePublic('%s') class="btn btn-info">Make public</button>`
+	// 	}
+	// 	appHTMLString += fmt.Sprintf(`
+	// 	<div id="%s" class=\"doc\">
+	// 		<p>%s</p>
+	// 		%s
+	// 		<button type="button" onclick="deleteContainer('%s')" class="btn btn-danger">Delete</button>
+	// 		<hr>
+	// 		<h5>%s</h5>
+	// 	</div`, app.ContainerID, app.Name, btn, app.ContainerID, app.ContainerID, app.Description)
+	// }
+
+	// for _, database := range databases {
+	// 	dbHTMlstring += fmt.Sprintf(`
+	// 	<div id="%s" class=\"doc\">
+	// 		<p>%s</p>
+	// 		<button type="button" class="btn btn-info" disabled>Esporta</button>
+	// 		<button type="button" onclick="deleteContainer('%s')" class="btn btn-danger">Delete</button>
+	// 	</div`, database.ContainerID, database.Name, database.ContainerID)
+	// }
+
+	toParse := struct {
+		Name string
+		Pfp  string
+		// Apps string
+		// DBs  string
+	}{
+		Name: student.Name + " " + student.LastName,
+		Pfp:  student.Pfp,
+		// Apps: appHTMLString,
+		// DBs:  dbHTMlstring,
+	}
+
+	t.Execute(w, toParse)
+}
+
+func (h Handler) NewAppPageHandler(w http.ResponseWriter, r *http.Request) {
+	http.ServeFile(w, r, "./pages/newApp.html")
+}
+
+func (h Handler) NewDatabasePageHandler(w http.ResponseWriter, r *http.Request) {
+	http.ServeFile(w, r, "./pages/newDB.html")
+}
+
+func (h Handler) PublicStudentPageHandler(w http.ResponseWriter, r *http.Request) {
+	id := mux.Vars(r)["studentID"]
+
+	db, err := connectToDB()
+	if err != nil {
+		resp.Error(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	//get the student generic infos from the access token
+	idI, err := strconv.Atoi(id)
+	if err != nil {
+		resp.Error(w, http.StatusBadRequest, "invalid student id")
+		return
+	}
+	student, err := GetStudentFromID(idI, db)
+	if err != nil {
+		resp.Error(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	//load page with the student info
+	//template
+	t, err := template.ParseFiles("./pages/student.html")
+	if err != nil {
+		resp.Error(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	toParse := struct {
+		StudentID string
+		Name      string
+		LastName  string
+	}{
+		StudentID: id,
+		Name:      student.Name,
+		LastName:  student.LastName,
+	}
+
+	fmt.Println(toParse)
+
+	t.Execute(w, toParse)
 }
 
 //constructor
