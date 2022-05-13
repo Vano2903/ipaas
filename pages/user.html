@@ -26,27 +26,22 @@
         <h1 id="apptitle">La tua <b class="theme-color">Home</b></h1>
 
         <div id="profile" onclick="logoutconfirm(1)">
-            <p>Username</p>
-            <img src="..\..\static\]media\common\elements\generic_profilepic.png">
+            <p>{{.Name}}</p>
+            <img src="{{.Pfp}}">
         </div>
 
         <div id="high" class="cardholder">
-            <div id="c_wallet" class="card card-wallet" onclick="transition('wallet','documents');docrefresh();">
-                <p>Wallet</p>
-                <p>Right here, ready to use</p>
+
+            <div id="c_wallet" class="card card-wallet"
+                onclick="loadApplications(); transition('wallet','applications');">
+                <p>Applicazioni</p>
+                <p>Tutte le tue applicazioni</p>
             </div>
             <hr>
-            <div id="c_newtravel" onclick="transition('wallet','newtravel')" class="card card-newtravel">
-                <p>Travel</p>
-                <p>Plan a new adventure</p>
-            </div>
-            <div id="c_check" onclick="transition('wallet','documents')" class="card card-check">
-                <p>Check</p>
-                <p>Something is missing for your next travel, check your wallet</p>
-            </div>
-            <div id="c_travel" class="card card-travel">
-                <p>Ready</p>
-                <p>You're all set</p>
+            <div id="c_newtravel" onclick="loadDatabases();transition('wallet','databases')"
+                class="card card-newtravel">
+                <p>Databases</p>
+                <p>Tutti i tuoi dati</p>
             </div>
         </div>
 
@@ -55,81 +50,78 @@
         </div>
     </section>
 
-    <section id="documents">
-        <h1 id="wallettit">Your <b class="theme-color">Wallet</b></h1>
+    <section id="applications">
+        <h1 id="wallettit">Le tue <b class="theme-color">App</b></h1>
 
         <div id="profile2" onclick="logoutconfirm(1)">
-            <p>Username</p>
-            <img src="..\..\static\]media\common\elements\generic_profilepic.png">
+            <p>{{.Name}}</p>
+            <img src="{{.Pfp}}">
         </div>
 
-        <div id="logo" onclick="transition('documents','wallet')">
-            <p>Back to</p>
-            <img src="..\..\static\]media\common\brand\purseFAV.png">
+        <div id="logo" onclick="transition('applications','wallet')">
+            <p>Torna alla home</p>
+            <!-- <img src="..\..\static\]media\common\brand\purseFAV.png"> -->
         </div>
 
-        <div id="high" class="docholder">
+        <div id="applicationsContainer" class="docholder">
+            <!-- <div id="c_wallet" class="doc">
+                <p>18008-testing-go</p>
+                <button type="button" class="btn btn-info">Make public</button>
+                <button type="button" class="btn btn-danger">Delete</button>
+            </div>
+
             <div id="c_wallet" class="doc">
                 <p>Green Pass</p>
-                <img src="..\..\static\]media\greenFacSimile.PNG">
-            </div>
+                <button type="button" class="btn btn-warning">Make private</button>
+                <button type="button" class="btn btn-danger">Delete</button>
+                <hr>
+                <h5>Questa é la descrizione del programma e secondo me ci puó anche stare visto che é storto</h5>
+            </div> -->
+
         </div>
 
-        <div id="adddoc" onclick="adddoctoggle()">
+        <div id="adddoc" class="adddoc" onclick="adddoctoggle()">
             <h1>+</h1>
-            <h2 onclick="adddoc('id')">ID Card</h2>
-            <h2 onclick="adddoc('pasp')">Pasport</h2>
-            <h2 onclick="adddoc('ticket')">Boarding ticket</h2>
-            <h2 onclick="adddoc('visa')">Visas and auths</h2>
-            <h2 onclick="adddoc('green')">Green Pass</h2>
-            <h2 onclick="adddoc('swab')">Swab</h2>
+            <h2 onclick="create('app')">Applicazione</h2>
+            <h2 onclick="create('db')">Database</h2>
         </div>
-        <input type="file" id="inputFile">
     </section>
 
-    <section id="newtravel">
-        <h1 id="traveltit">Your new <b class="theme-color">Travel</b></h1>
+    <section id="databases">
+        <h1 id="traveltit">I tuoi <b class="theme-color">DB</b></h1>
 
-        <div id="logo" onclick="transition('newtravel','wallet')">
-            <p>Back to</p>
-            <img src="..\..\static\]media\common\brand\purseFAV.png">
+        <div id="logo" onclick="transition('databases','wallet')">
+            <p>Torna alla home</p>
+            <!-- <img src="..\..\static\]media\common\brand\purseFAV.png"> -->
         </div>
 
-        <div class="docholder" style="height: 50%;">
-            <p>DEMO includes travels from BGY only</p>
+        <div id="databasesContainer" class="docholder">
+            <!-- <div id="c_wallet" class="doc">
+                <p>18008:mysql/vanella</p>
+                <button type="button" class="btn btn-info" disabled>Esporta</button>
+                <button type="button" class="btn btn-danger">Delete</button>
+            </div>
+            <div id="c_wallet" class="doc">
+                <p>18008:mysql/vanella</p>
+                <button type="button" class="btn btn-info" disabled>Esporta</button>
+                <button type="button" class="btn btn-danger">Delete</button>
+            </div>
+            <div id="c_wallet" class="doc">
+                <p>18008:mysql/vanella</p>
+                <button type="button" class="btn btn-info" disabled>Esporta</button>
+                <button type="button" class="btn btn-danger">Delete</button>
+            </div>
+            <div id="c_wallet" class="doc">
+                <p>18008:mysql/vanella</p>
+                <button type="button" class="btn btn-info" disabled>Esporta</button>
+                <button type="button" class="btn btn-danger">Delete</button>
+            </div> -->
+        </div>
 
-            <form style="width: 80%; height:50%;margin-top: 6em;">
-                <div id="signup1">
-                    <div class="row g-0 py-2">
-                        <div class="col">
-                            <div class="form-floating">
-                                <select class="form-control" id="travelStart" disabled="true">
-                                    <option>Bergamo Orio Al Serio</option>
-                                </select>
-                                <label for="travelStart">From</label>
-                            </div>
-                        </div>
-                        <div class="col">
-                            <div class="form-floating">
-                                <select type="text" class="form-control" id="travelDestination">
-                                    <option>Roma Fiumicino</option>
-                                    <option>Catania</option>
-                                    <option>London City</option>
-                                    <option>San Francisco</option>
-                                    <option>Berlino</option>
-                                    <option>Camberra</option>
-                                    <option>Tokyo</option>
-                                    <option>Parigi</option>
-                                </select>
-                                <label for="travelDestination">To</label>
-                            </div>
-                        </div>
-                    </div>
-
-                    <button class="w-100 btn btn-lg btn-primary" type="button"
-                        onclick="newtravel(); transition('newtravel','wallet');">Add</button>
-
-            </form>
+        <div id="adddoc2" class="adddoc" onclick="adddoctoggle()">
+            <h1>+</h1>
+            <h2 onclick="create('app')">Applicazione</h2>
+            <h2 onclick="create('db')">Database</h2>
         </div>
 
     </section>
@@ -145,16 +137,7 @@
 
     <script src="/static/js/homeUI.js"></script>
     <script src="/static/js/home.js"></script>
-    <script>
-        var check = localStorage.getItem("rememberMe");
-        if (check) {
-            var localsUser = localStorage.getItem("user")
-            if (localsUser !== null) {
-                user = JSON.parse(localsUser)
-                checkLogin("def");
-            }
-        }
-    </script>
+    <script src="/static/js/utils.js"></script>
 </body>
 
 </html>
