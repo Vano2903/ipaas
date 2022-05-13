@@ -176,7 +176,7 @@ func generateRandomString(size int) string {
 func getFreePort() (int, error) {
 	//:0 is the kernel port to get a free port
 	//we are asking for a random open port
-	addr, err := net.ResolveTCPAddr("tcp", "127.0.0.1:0")
+	addr, err := net.ResolveTCPAddr("tcp", os.Getenv("IP")+":0")
 	if err != nil {
 		return 0, err
 	}
