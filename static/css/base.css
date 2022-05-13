@@ -28,18 +28,22 @@ body,h1 {
 form{
     align-items: center;
 }
+
 .btn{
     border-width: 3px;
 }
+
 .underline{
     margin-top: 0.5em;
     text-decoration: underline;
     color: #a7a7a7;
     cursor:pointer;
 }
+
 .underline:hover{
     color: #7c7c7c;
 }
+
 /*######## COLORI #########*/
 :root {
     --theme-color: #5be99c;
@@ -47,17 +51,22 @@ form{
 }
 
 .btn-primary,.btn-primary:active{
-    background-color: #5be99c; border-color: #5be99c;}
+    background-color: #5be99c; border-color: #5be99c;
+}
+
 .btn-primary:hover{
-    background-color: #79e7ab; border-color: #5be99c;}
+    background-color: #79e7ab; border-color: #5be99c;
+}
+
 .btn-primary:focus{
     background-color: #5be99c; border-color: #5be99c;
-    box-shadow: 0 0 0 0.25rem rgb(91 233 156 / 34%)!important;}
+    box-shadow: 0 0 0 0.25rem rgb(91 233 156 / 34%)!important;
+}
+
 .btn-primary.disabled, .btn-primary:disabled{
     transition: 0.4s background-color, 1s border-color;
     background-color: #90a499; border-color: #90a499;
 }
-
 
 /*######## IMMMAGINI #########*/
 .card-wallet{
@@ -67,6 +76,7 @@ form{
     max-width: 350px;
     height: 160px;
 }
+
 .card-check{
     background-image: url("https://i.imgur.com/YZ0y5Mb.png");
     color: #0e994f80;
@@ -74,6 +84,7 @@ form{
     max-width: 350px;
     height: 150px;
 }
+
 .card-newtravel{
     background-image: url("https://i.imgur.com/rIFaK5m.png");
     color: #0e994f80;
@@ -81,6 +92,7 @@ form{
     max-width: 350px;
     height: 100px;
 }
+
 .card-travel{
     background-image: url("https://i.imgur.com/qysrjqA.png");
     color: #0e994f80;
@@ -89,18 +101,20 @@ form{
 
 
 /*######## SCROLLBAR #########*/
-
 ::-webkit-scrollbar{
     width: 9px;
     height: 9px;
 }
+
 ::-webkit-scrollbar-thumb{
     background: #f3af62;
     border-radius: 26px;
 }
+
 ::-webkit-scrollbar-thumb:hover{
     background: #cf9654;
 }
+
 ::-webkit-scrollbar-track{
     background: #F0F0F0;
     border-radius: 30px;
