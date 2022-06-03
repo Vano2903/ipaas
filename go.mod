@@ -7,6 +7,7 @@ require (
 	github.com/docker/go-connections v0.4.0
 	github.com/go-git/go-git/v5 v5.4.2
 	github.com/go-sql-driver/mysql v1.6.0
+	github.com/gorilla/handlers v1.5.1
 	github.com/gorilla/mux v1.8.0
 	github.com/gorilla/sessions v1.2.1
 	github.com/joho/godotenv v1.4.0
@@ -22,6 +23,7 @@ require (
 	github.com/docker/distribution v2.8.0+incompatible // indirect
 	github.com/docker/go-units v0.4.0 // indirect
 	github.com/emirpasic/gods v1.12.0 // indirect
+	github.com/felixge/httpsnoop v1.0.1 // indirect
 	github.com/go-git/gcfg v1.5.0 // indirect
 	github.com/go-git/go-billy/v5 v5.3.1 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect

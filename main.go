@@ -4,6 +4,7 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 )
 
@@ -111,11 +112,10 @@ func main() {
 	appApiRouter.HandleFunc("/new", handler.NewApplicationHandler).Methods("POST")
 	appApiRouter.HandleFunc("/update/{containerID}", handler.UpdateApplicationHandler).Methods("POST")
 
-	server := &http.Server{
-		Addr:    "0.0.0.0:8080",
-		Handler: mainRouter,
-	}
+	headersOk := handlers.AllowedHeaders([]string{"X-Requested-With"})
+	originsOk := handlers.AllowedOrigins([]string{"*"})
+	methodsOk := handlers.AllowedMethods([]string{"GET", "POST"})
 
 	log.Println("starting the server on port 8080")
-	log.Fatal(server.ListenAndServe())
+	log.Fatal(http.ListenAndServe(":8080", handlers.CORS(originsOk, headersOk, methodsOk)(mainRouter)))
 }
