@@ -153,9 +153,7 @@ func (h Handler) NewDBHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	json := make(map[string]interface{})
-
-	json = map[string]interface{}{
+	json := map[string]interface{}{
 		"important": "the password is for root user of the server",
 		"user":      "root",
 		"port":      port,
