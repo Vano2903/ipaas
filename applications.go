@@ -26,12 +26,14 @@ type Application struct {
 	Name           string    `json:"name"`
 	Description    string    `json:"description"`
 	GithubRepo     string    `json:"githubRepo"`
+	GithubBranch   string    `json:"githubBranch"`
 	LastCommitHash string    `json:"lastCommitHash"`
 	Port           string    `json:"port"`
 	ExternalPort   string    `json:"externalPort"`
 	Lang           string    `json:"lang"`
 	CreatedAt      time.Time `json:"createdAt"`
 	IsPublic       bool      `json:"isPublic"`
+	IsUpdatable    bool      `json:"isUpdatable"`
 }
 
 //create a container from an image which is the one created from a student's repository
@@ -85,6 +87,45 @@ func (c ContainerController) CreateNewApplicationFromRepo(creatorID int, port, n
 	return containerBody.ID, nil
 }
 
-func (c ContainerController) GetAppInfoFromContainer(containerId string) (AppPost, string, error) {
-	return AppPost{}, "", nil
+//return the application metadata from the container id
+//it can be specified if to check if the last commit has changed and to retrive the envs
+func (c ContainerController) GetAppInfoFromContainer(containerId string, checkCommit, getEnvs bool, util *Util) (Application, map[string]string, error) {
+	db, err := connectToDB()
+	if err != nil {
+		return Application{}, nil, err
+	}
+	defer db.Close()
+
+	var app Application
+
+	err = db.QueryRow("SELECT * FROM applications WHERE containerID = ?", containerId).Scan(&app.ID, &app.ContainerID, &app.Status, &app.StudentID, &app.Type, &app.Name, &app.Description, &app.GithubRepo, &app.LastCommitHash, &app.Port, &app.ExternalPort, &app.Lang, &app.CreatedAt, &app.IsPublic)
+	if err != nil {
+		return Application{}, nil, err
+	}
+
+	if checkCommit {
+		app.IsUpdatable, err = util.HasLastCommitChanged(app.LastCommitHash, app.GithubRepo, app.GithubBranch)
+		if err != nil {
+			return Application{}, nil, err
+		}
+	}
+
+	if getEnvs {
+		envs := make(map[string]string)
+		results, err := db.Query("SELECT * FROM envs WHERE applicationID=?", app.ID)
+		if err != nil {
+			return Application{}, nil, err
+		}
+		for results.Next() {
+			var key, value string
+			err = results.Scan(&key, &value)
+			if err != nil {
+				return Application{}, nil, err
+			}
+			envs[key] = value
+		}
+		return app, envs, nil
+	}
+
+	return app, nil, nil
 }
