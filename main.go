@@ -33,7 +33,7 @@ import (
 
 *user api endpoints:
 /api/user/ -> get the info of the user
-/api/user/getApps/{type} -> get all the applications of a user (private or public)
+/api/user/getApps/{type} -> get all the applications of a user (private or public) with the type of application (database, web, all, updatable)
 
 *container api endpoints:
 /api/container/delete/{containerID} -> delete a container
@@ -85,6 +85,8 @@ func main() {
 	userApiRouter.HandleFunc("/", handler.LoginHandler).Methods("GET")
 	//get all the applications (even the private one) must define the type (database, web, all)
 	userApiRouter.HandleFunc("/getApps/{type}", handler.GetAllApplicationsOfStudentPrivate).Methods("GET")
+	//update an application
+	userApiRouter.HandleFunc("/application/update/{containerID}", handler.UpdateApplicationHandler).Methods("GET")
 
 	//! CONTAINER HANDLERS
 	containerApiRouter := api.PathPrefix("/container").Subrouter()
