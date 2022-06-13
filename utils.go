@@ -1,15 +1,16 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"database/sql"
+	"encoding/json"
+	"errors"
 	"fmt"
+	"io/ioutil"
 	"math/rand"
 	"net"
 	"net/http"
 	"os"
-	"os/exec"
 	"strings"
 	"time"
 
@@ -27,6 +28,15 @@ var (
 
 type Util struct {
 	ctx context.Context
+}
+
+type GithubCommit struct {
+	SHA    string               `json:"sha"`
+	Commit GithubCommitInternal `json:"commit"`
+}
+
+type GithubCommitInternal struct {
+	Message string `json:"message"`
 }
 
 //get the student from the database given a valid access token (will be retrived from cookies)
@@ -114,18 +124,59 @@ func (u Util) DownloadGithubRepo(userID int, branch, url string) (string, string
 	return fmt.Sprintf("./tmp/%d-%s", userID, repoName), repoName, commitHash.Hash.String(), nil
 }
 
+//given a github repository url it will return the name of the repo and the owner
+func (u Util) GetUserAndNameFromRepoUrl(url string) (string, string) {
+	url = url[19 : len(url)-4]
+	fmt.Println("new URL:", url)
+	split := strings.Split(url, "/")
+	return split[0], split[1]
+}
+
+//TODO: should read just the last one not all the commits in the json
 //given the github information of a repo it will tell if the commit has changed in the remote repo
 func (u Util) HasLastCommitChanged(commit, url, branch string) (bool, error) {
-	//output buffer so it doesnt print in the stdout
-	var out bytes.Buffer
-	cmd := exec.CommandContext(u.ctx, "git", "ls-remote", url, "| head -n1 | cut -f1")
-	cmd.Stdout = &out
-	err := cmd.Run()
+	//get request to the github api
+	owner, name := u.GetUserAndNameFromRepoUrl(url)
+	fmt.Printf("https://api.github.com/repos/%s/%s/commits?sha=%s\n", owner, name, branch)
+	req, err := http.NewRequest("GET", fmt.Sprintf("https://api.github.com/repos/%s/%s/commits?sha=%s", owner, name, branch), nil)
 	if err != nil {
 		return false, err
 	}
-	remoteCommit := out.String()
-	return remoteCommit != commit, nil
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return false, err
+	}
+
+	//read the response
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return false, err
+	}
+
+	fmt.Println("body 1:", string(body))
+
+	//if there is an error return the message
+	if resp.StatusCode != 200 {
+		var Error GithubCommitInternal
+		err = json.Unmarshal(body, &Error)
+		if err != nil {
+			return false, err
+		}
+		return false, fmt.Errorf("application: %s/%s returned a status code: %d, message: %s", owner, name, resp.StatusCode, Error.Message)
+	}
+
+	var RepoCommits []GithubCommit
+	err = json.Unmarshal(body, &RepoCommits)
+	if err != nil {
+		return false, err
+	}
+
+	//check if repo dosen't have commits
+	if len(RepoCommits) == 0 {
+		return false, errors.New("no commit found")
+	}
+
+	return RepoCommits[0].SHA != commit, nil
 }
 
 //generate a new pointer to the util struct
