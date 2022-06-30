@@ -15,23 +15,19 @@ services:
     #   networks:
     #     - "ipaas"
     db:
-      image: mariadb:10.2
+      image: mongo:5.0
       restart: always
       environment:
-        MYSQL_DATABASE: ipaas
-        MYSQL_ROOT_PASSWORD: root
+        MONGO_INITDB_ROOT_USERNAME: vano
+        MONGO_INITDB_ROOT_PASSWORD: vanovano
       ports:
-        - "3306:3306"
+        - 27017:27017
       volumes:
-        - ./db/tables.sql:/docker-entrypoint-initdb.d/tables.sql
-        - ./ipaas-db-dump:/var/lib/mysql
-      command: ['mysqld', '--character-set-server=utf8mb4', '--collation-server=utf8mb4_unicode_ci']
-      # exec:
-      #     - mysql -uroot -proot -e"source /docker-entrypoint-initdb.d/tables.sql"
+        - ~/ipaas-db-dump:/data/db
       networks:
         - "ipaas"
 volumes:
-  mariadb:
+  db:
 
 networks:
   ipaas:

@@ -66,4 +66,3 @@ CREATE TABLE IF NOT EXISTS `refreshTokens` (
     `refreshExp` DATETIME NOT NULL,
     PRIMARY KEY (`ID`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
-
