@@ -1,12 +1,15 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
+	"time"
 
 	resp "github.com/vano2903/ipaas/responser"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 //! still under development
@@ -23,7 +26,7 @@ func (h Handler) NewDBHandler(w http.ResponseWriter, r *http.Request) {
 		resp.Errorf(w, http.StatusInternalServerError, "error connecting to the database: %v", err.Error())
 		return
 	}
-	defer conn.Close()
+	defer conn.Client().Disconnect(context.TODO())
 
 	//get the student from the cookies
 	student, err := h.util.GetUserFromCookie(r, conn)
@@ -83,15 +86,22 @@ func (h Handler) NewDBHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	//add a new database application created by the student (student id)
-	insertApplicationQuery := `
-	INSERT INTO applications (containerID, status, studentID, type, name, description, port, externalPort) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-	`
+	var Db Application
+	Db.ID = primitive.NewObjectID()
+	Db.ContainerID = id
+	Db.Status = "up"
+	Db.StudentID = student.ID
+	Db.Type = "database"
+	Db.Name = fmt.Sprintf("%d:%s/%s", student.ID, dbPost.DbType, dbPost.DbName)
+	Db.Description = dbPost.DbDescription
+	Db.Port = h.cc.dbContainersConfigs[dbPost.DbType].port
+	Db.ExternalPort = port
+	Db.CreatedAt = time.Now()
+	// Db.Envs =
 
-	//exec the query, the status will be up and type database, the name will follow the nomenclature of <studentID>:<dbType>/<dbName>
-	_, err = conn.Exec(insertApplicationQuery, id, "up", student.ID, "database", fmt.Sprintf("%d:%s/%s", student.ID, dbPost.DbType, dbPost.DbName), "", h.cc.dbContainersConfigs[dbPost.DbType].port, port)
+	_, err = conn.Collection("applications").InsertOne(context.TODO(), Db)
 	if err != nil {
-		resp.Errorf(w, http.StatusInternalServerError, "unable to link the application to the user: %v", err.Error())
+		resp.Errorf(w, http.StatusInternalServerError, "error inserting the application: %v", err.Error())
 		return
 	}
 

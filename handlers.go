@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
@@ -28,7 +29,7 @@ func (h Handler) OauthHandler(w http.ResponseWriter, r *http.Request) {
 		resp.Error(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	defer db.Close()
+	defer db.Client().Disconnect(context.TODO())
 	session, _ := h.sess.Get(r, "ipaas-session")
 	//read url parameters (code and state)
 	parameters := r.URL.Query()
@@ -52,15 +53,15 @@ func (h Handler) OauthHandler(w http.ResponseWriter, r *http.Request) {
 		//set the tokens as cookie
 		//!should set domain and path
 		http.SetCookie(w, &http.Cookie{
-			Name:    "accessToken",
+			Name:    "ipaas-access-token",
 			Path:    "/",
-			Value:   response["accessToken"].(string),
+			Value:   response["ipaas-access-token"].(string),
 			Expires: time.Now().Add(time.Hour),
 		})
 		http.SetCookie(w, &http.Cookie{
-			Name:    "refreshToken",
+			Name:    "ipaas-refresh-token",
 			Path:    "/",
-			Value:   response["refreshToken"].(string),
+			Value:   response["ipaas-refresh-token"].(string),
 			Expires: time.Now().Add(time.Hour * 24 * 7),
 		})
 		resp.SuccessParse(w, http.StatusOK, "Token generated", response)
@@ -101,15 +102,15 @@ func (h Handler) OauthHandler(w http.ResponseWriter, r *http.Request) {
 
 		//!should set domain and path
 		http.SetCookie(w, &http.Cookie{
-			Name:    "accessToken",
+			Name:    "ipaas-access-token",
 			Path:    "/",
-			Value:   response["accessToken"].(string),
+			Value:   response["ipaas-access-token"].(string),
 			Expires: time.Now().Add(time.Hour),
 		})
 		http.SetCookie(w, &http.Cookie{
-			Name:    "refreshToken",
+			Name:    "ipaas-refresh-token",
 			Path:    "/",
-			Value:   response["refreshToken"].(string),
+			Value:   response["ipaas-refresh-token"].(string),
 			Expires: time.Now().Add(time.Hour * 24 * 7),
 		})
 		http.SetCookie(w, &http.Cookie{
@@ -154,11 +155,11 @@ func (h Handler) LoginHandler(w http.ResponseWriter, r *http.Request) {
 		resp.Error(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	defer db.Close()
+	defer db.Client().Disconnect(context.TODO())
 
 	log.Println("getting access token")
 	//get the access token from the cookie
-	cookie, err := r.Cookie("accessToken")
+	cookie, err := r.Cookie("ipaas-access-token")
 	if err != nil {
 		if err == http.ErrNoCookie {
 			resp.Error(w, http.StatusBadRequest, "No access token")
@@ -184,7 +185,7 @@ func (h Handler) LoginHandler(w http.ResponseWriter, r *http.Request) {
 //generate a new token pair from the refresh token saved in the cookies
 func (h Handler) NewTokenPairFromRefreshTokenHandler(w http.ResponseWriter, r *http.Request) {
 	//get the refresh token from the cookie
-	cookie, err := r.Cookie("refreshToken")
+	cookie, err := r.Cookie("ipaas-refresh-token")
 	if err != nil {
 		if err == http.ErrNoCookie {
 			resp.Error(w, http.StatusBadRequest, "No refresh token")
@@ -208,10 +209,15 @@ func (h Handler) NewTokenPairFromRefreshTokenHandler(w http.ResponseWriter, r *h
 		resp.Error(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	defer db.Close()
+	defer db.Client().Disconnect(context.TODO())
 
 	//check if the refresh token is expired
-	if IsTokenExpired(false, refreshToken, db) {
+	isExpired, err := IsRefreshTokenExpired(refreshToken, db)
+	if err != nil {
+		resp.Error(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if isExpired {
 		//!should redirect to the oauth page
 		resp.Error(w, 498, "Refresh token is expired")
 		return
@@ -226,13 +232,13 @@ func (h Handler) NewTokenPairFromRefreshTokenHandler(w http.ResponseWriter, r *h
 
 	//delete the old tokens from the cookies
 	http.SetCookie(w, &http.Cookie{
-		Name:    "accessToken",
+		Name:    "ipaas-access-token",
 		Path:    "/",
 		Value:   "",
 		Expires: time.Unix(0, 0),
 	})
 	http.SetCookie(w, &http.Cookie{
-		Name:    "refreshToken",
+		Name:    "ipaas-refresh-token",
 		Path:    "/",
 		Value:   "",
 		Expires: time.Unix(0, 0),
@@ -241,13 +247,13 @@ func (h Handler) NewTokenPairFromRefreshTokenHandler(w http.ResponseWriter, r *h
 	//set the new tokens
 	//!should set domain and path
 	http.SetCookie(w, &http.Cookie{
-		Name:    "accessToken",
+		Name:    "ipaas-access-token",
 		Path:    "/",
 		Value:   accessToken,
 		Expires: time.Now().Add(time.Hour),
 	})
 	http.SetCookie(w, &http.Cookie{
-		Name:    "refreshToken",
+		Name:    "ipaas-refresh-token",
 		Path:    "/",
 		Value:   newRefreshToken,
 		Expires: time.Now().Add(time.Hour * 24 * 7),
@@ -255,8 +261,8 @@ func (h Handler) NewTokenPairFromRefreshTokenHandler(w http.ResponseWriter, r *h
 
 	//we also respond with the new tokens so the client doesn't have to depend from the cookies
 	response := map[string]interface{}{
-		"accessToken":  accessToken,
-		"refreshToken": newRefreshToken,
+		"ipaas-access-token":  accessToken,
+		"ipaas-refresh-token": newRefreshToken,
 	}
 	resp.SuccessParse(w, http.StatusOK, "New token pair generated", response)
 }

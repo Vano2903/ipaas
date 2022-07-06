@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"html/template"
 	"net/http"
@@ -28,14 +29,14 @@ func (h Handler) UserPageHandler(w http.ResponseWriter, r *http.Request) {
 		resp.Error(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	defer db.Close()
+	defer db.Client().Disconnect(context.TODO())
 
 	//get the access token from the cookie
-	cookie, err := r.Cookie("accessToken")
+	cookie, err := r.Cookie("ipaas-access-token")
 	if err != nil {
 		if err == http.ErrNoCookie {
 			//new token pair
-			cookie, err := r.Cookie("refreshToken")
+			cookie, err := r.Cookie("ipaas-refresh-token")
 			if err != nil {
 				if err == http.ErrNoCookie {
 					resp.Error(w, http.StatusBadRequest, "No refresh token")
@@ -53,7 +54,11 @@ func (h Handler) UserPageHandler(w http.ResponseWriter, r *http.Request) {
 			}
 
 			//check if the refresh token is expired
-			if IsTokenExpired(false, refreshToken, db) {
+			isExpired, err := IsRefreshTokenExpired(refreshToken, db)
+			if err != nil {
+				resp.Errorf(w, http.StatusInternalServerError, "Error checking if refresh token is expired: %s", err.Error())
+			}
+			if isExpired {
 				//!should redirect to the oauth page
 				resp.Error(w, 498, "Refresh token is expired")
 				return
@@ -68,13 +73,13 @@ func (h Handler) UserPageHandler(w http.ResponseWriter, r *http.Request) {
 
 			//delete the old tokens from the cookies
 			http.SetCookie(w, &http.Cookie{
-				Name:    "accessToken",
+				Name:    "ipaas-access-token",
 				Path:    "/",
 				Value:   "",
 				Expires: time.Unix(0, 0),
 			})
 			http.SetCookie(w, &http.Cookie{
-				Name:    "refreshToken",
+				Name:    "ipaas-refresh-token",
 				Path:    "/",
 				Value:   "",
 				Expires: time.Unix(0, 0),
@@ -83,13 +88,13 @@ func (h Handler) UserPageHandler(w http.ResponseWriter, r *http.Request) {
 			//set the new tokens
 			//!should set domain and path
 			http.SetCookie(w, &http.Cookie{
-				Name:    "accessToken",
+				Name:    "ipaas-access-token",
 				Path:    "/",
 				Value:   accessToken,
 				Expires: time.Now().Add(time.Hour),
 			})
 			http.SetCookie(w, &http.Cookie{
-				Name:    "refreshToken",
+				Name:    "ipaas-refresh-token",
 				Path:    "/",
 				Value:   newRefreshToken,
 				Expires: time.Now().Add(time.Hour * 24 * 7),

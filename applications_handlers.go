@@ -1,16 +1,19 @@
 package main
 
 import (
-	"database/sql"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
 	"strconv"
+	"time"
 
 	"github.com/docker/docker/api/types"
 	"github.com/gorilla/mux"
 	resp "github.com/vano2903/ipaas/responser"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
 //TODO: should delete the container/image in case of an error because it would stop the user to create again the application
@@ -26,7 +29,7 @@ func (h Handler) NewApplicationHandler(w http.ResponseWriter, r *http.Request) {
 		resp.Errorf(w, http.StatusInternalServerError, "error connecting to the database: %v", err.Error())
 		return
 	}
-	defer conn.Close()
+	defer conn.Client().Disconnect(context.Background())
 
 	//get the student from the cookies
 	student, err := h.util.GetUserFromCookie(r, conn)
@@ -116,34 +119,28 @@ func (h Handler) NewApplicationHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	fmt.Println("status:", status)
 
-	//add a new database application created by the student (student id)
-	insertApplicationQuery := `
-	INSERT INTO applications 
-	(containerID, status, studentID, type, name, description, githubRepo, lastCommit, port, language, externalPort) 
-	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-
-	//exec the query, the status will be up and type database, the name will follow the nomenclature of <studentID>:<dbType>/<dbName>
-	app, err := conn.Exec(insertApplicationQuery, id, status, student.ID, "web", imageName, appPost.Description, appPost.GithubRepoUrl, hash, appPost.Port, appPost.Language, exernalPort)
-	if err != nil {
-		resp.Errorf(w, http.StatusInternalServerError, "unable to link the application to the user: %v", err.Error())
-		return
-	}
-
-	appId, err := app.LastInsertId()
-	if err != nil {
-		resp.Errorf(w, http.StatusInternalServerError, "unable to link the application to the user: %v", err.Error())
-		return
-	}
-
-	insertEnvsQuery := `INSERT INTO envs (applicationID, key, value) VALUES (?, ?, ?)`
+	var envs []Env
 	for key, value := range appPost.Envs {
-		_, err = conn.Exec(insertEnvsQuery, appId, key, value)
-		if err != nil {
-			resp.Errorf(w, http.StatusInternalServerError, "unable to insert the env: %v", err.Error())
-			return
-		}
+		envs = append(envs, Env{key, value})
 	}
 
+	var app Application
+	app.ContainerID = id
+	app.Status = status
+	app.StudentID = student.ID
+	app.Type = "web"
+	app.Name = imageName
+	app.Description = appPost.Description
+	app.GithubRepo = appPost.GithubRepoUrl
+	app.LastCommitHash = hash
+	app.Port = appPost.Port
+	app.Lang = appPost.Language
+	app.ExternalPort = exernalPort
+	app.CreatedAt = time.Now()
+	app.Envs = envs
+
+	//insert the application in the database
+	conn.Collection("applications").InsertOne(context.Background(), app)
 	toSend := map[string]interface{}{
 		"container id":  id,
 		"external_port": os.Getenv("IP") + ":" + exernalPort,
@@ -164,7 +161,7 @@ func (h Handler) DeleteApplicationHandler(w http.ResponseWriter, r *http.Request
 		resp.Errorf(w, http.StatusInternalServerError, "error connecting to the database: %v", err.Error())
 		return
 	}
-	defer conn.Close()
+	defer conn.Client().Disconnect(context.Background())
 
 	//get the student from the cookies
 	student, err := h.util.GetUserFromCookie(r, conn)
@@ -172,18 +169,20 @@ func (h Handler) DeleteApplicationHandler(w http.ResponseWriter, r *http.Request
 		resp.Errorf(w, http.StatusInternalServerError, "error getting the user from cookies: %v", err.Error())
 		return
 	}
-
-	//get the application from the database and check if it's owned by the student
-	// var app Application
-	// var tmp, githubRepo, LastCommitHash, port, Lang sql.NullString
-	var id int
-	err = conn.QueryRow(`SELECT id FROM applications WHERE studentID = ? AND containerID = ?`, student.ID, containerID).Scan(&id)
+	applicationCollection := conn.Collection("applications")
+	var app Application
+	err = applicationCollection.FindOne(context.Background(), bson.M{"containerID": containerID}).Decode(&app)
 	if err != nil {
-		if err == sql.ErrNoRows {
-			resp.Errorf(w, http.StatusBadRequest, "application not found, the application might have the wrong container id or you dont own it")
+		if err == mongo.ErrNoDocuments {
+			resp.Errorf(w, http.StatusBadRequest, "there is no application with this id")
 			return
 		}
-		resp.Errorf(w, http.StatusInternalServerError, "error getting the application: %v", err.Error())
+		resp.Errorf(w, http.StatusInternalServerError, "error getting the application from the database: %v", err.Error())
+		return
+	}
+
+	if app.StudentID != student.ID {
+		resp.Errorf(w, http.StatusForbidden, "you don't have permission to delete this application")
 		return
 	}
 
@@ -194,16 +193,9 @@ func (h Handler) DeleteApplicationHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	//delete the application from the database
-	_, err = conn.Exec(`DELETE FROM applications WHERE containerID = ?`, containerID)
+	_, err = applicationCollection.DeleteOne(context.Background(), bson.M{"containerID": containerID})
 	if err != nil {
 		resp.Errorf(w, http.StatusInternalServerError, "error deleting the application: %v", err.Error())
-		return
-	}
-
-	_, err = conn.Exec(`DELETE FROM envs WHERE applicationID = ?`, id)
-	if err != nil {
-		resp.Errorf(w, http.StatusInternalServerError, "error deleting the envs: %v", err.Error())
 		return
 	}
 	resp.Success(w, http.StatusOK, "container deleted successfully")
@@ -227,7 +219,7 @@ func (h Handler) UpdateApplicationHandler(w http.ResponseWriter, r *http.Request
 		resp.Errorf(w, http.StatusInternalServerError, "error connecting to the database: %v", err.Error())
 		return
 	}
-	defer conn.Close()
+	defer conn.Client().Disconnect(context.Background())
 
 	//get the student from the cookies
 	student, err := h.util.GetUserFromCookie(r, conn)
@@ -237,24 +229,22 @@ func (h Handler) UpdateApplicationHandler(w http.ResponseWriter, r *http.Request
 	}
 
 	//get the application from the database and check if it's owned by the student
+	applicationCollection := conn.Collection("applications")
 	var app Application
-	var githubRepo, LastCommitHash, branch, port, Lang, externalPort sql.NullString
-	err = conn.QueryRow(`SELECT * FROM applications WHERE studentID = ? AND containerID = ? AND type = "web"`, student.ID, containerID).Scan(&app.ID, &app.ContainerID, &app.Status, &app.StudentID, &app.Type, &app.Name, &app.Description, &githubRepo, &LastCommitHash, &branch, &port, &externalPort, &Lang, &app.CreatedAt, &app.IsPublic)
+	err = applicationCollection.FindOne(context.Background(), bson.M{"containerID": containerID}).Decode(&app)
 	if err != nil {
-		if err == sql.ErrNoRows {
-			resp.Errorf(w, http.StatusBadRequest, "application not found, the application might have the wrong container id or you dont own it")
+		if err == mongo.ErrNoDocuments {
+			resp.Errorf(w, http.StatusBadRequest, "there is no application with this id")
 			return
 		}
-		resp.Errorf(w, http.StatusInternalServerError, "error getting the application: %v", err.Error())
+		resp.Errorf(w, http.StatusInternalServerError, "error getting the application from the database: %v", err.Error())
 		return
 	}
 
-	app.GithubRepo = githubRepo.String
-	app.LastCommitHash = LastCommitHash.String
-	app.GithubBranch = branch.String
-	app.Port = port.String
-	app.Lang = Lang.String
-	app.ExternalPort = externalPort.String
+	if app.StudentID != student.ID {
+		resp.Errorf(w, http.StatusForbidden, "you don't have permission to delete this application")
+		return
+	}
 
 	//check if the commit has changed
 	changed, err := h.util.HasLastCommitChanged(app.LastCommitHash, app.GithubRepo, "") //app.GithubBranch)
@@ -266,24 +256,6 @@ func (h Handler) UpdateApplicationHandler(w http.ResponseWriter, r *http.Request
 	if !changed {
 		resp.Errorf(w, http.StatusBadRequest, "the repo commit has not changed, the application will not be updated")
 		return
-	}
-
-	//get the environment variables
-	envs := make(map[string]string)
-	rows, err := conn.Query(`SELECT * FROM envs WHERE applicationID = ?`, app.ID)
-	if err != nil {
-		resp.Errorf(w, http.StatusInternalServerError, "error getting the envs: %v", err.Error())
-		return
-	}
-	for rows.Next() {
-		var tmp int
-		var key, value string
-		err = rows.Scan(&tmp, &key, &value)
-		if err != nil {
-			resp.Errorf(w, http.StatusInternalServerError, "error getting the envs: %v", err.Error())
-			return
-		}
-		envs[key] = value
 	}
 
 	//download the repo
@@ -306,6 +278,11 @@ func (h Handler) UpdateApplicationHandler(w http.ResponseWriter, r *http.Request
 	if err != nil {
 		resp.Errorf(w, http.StatusInternalServerError, "error deleting the container: %v", err.Error())
 		return
+	}
+
+	envs := make(map[string]string)
+	for _, env := range app.Envs {
+		envs[env.Key] = env.Value
 	}
 
 	//create the image from the repo downloaded
@@ -356,16 +333,15 @@ func (h Handler) UpdateApplicationHandler(w http.ResponseWriter, r *http.Request
 	}
 	fmt.Println("status:", status)
 
-	//add a new database application created by the student (student id)
-	updateApplicationQuery := `
-	UPDATE applications 
-	SET status = ?, containerID = ?, lastCommit = ?, externalPort = ? 
-	WHERE id = ?`
+	//update the application in the database
+	app.LastCommitHash = hash
+	app.ExternalPort = exernalPort
+	app.Status = status
+	app.ContainerID = newContainerID
 
-	//exec the query, the status will be up and type database, the name will follow the nomenclature of <studentID>:<dbType>/<dbName>
-	_, err = conn.Exec(updateApplicationQuery, status, newContainerID, hash, exernalPort, app.ID)
+	_, err = applicationCollection.UpdateOne(context.Background(), bson.M{"_id": app.ID}, bson.M{"$set": app})
 	if err != nil {
-		resp.Errorf(w, http.StatusInternalServerError, "unable to link the application to the user: %v", err.Error())
+		resp.Errorf(w, http.StatusInternalServerError, "error updating application: %v", err.Error())
 		return
 	}
 
@@ -399,7 +375,7 @@ func (h Handler) GetAllApplicationsOfStudentPrivate(w http.ResponseWriter, r *ht
 		resp.Errorf(w, http.StatusInternalServerError, "error connecting to the database: %v", err.Error())
 		return
 	}
-	defer conn.Close()
+	defer conn.Client().Disconnect(context.Background())
 
 	//get the student from the cookies
 	student, err := h.util.GetUserFromCookie(r, conn)
@@ -408,16 +384,20 @@ func (h Handler) GetAllApplicationsOfStudentPrivate(w http.ResponseWriter, r *ht
 		return
 	}
 
+	applicationCollection := conn.Collection("applications")
+
 	//get the applications from the database
-	var rows *sql.Rows
+	var apps []Application
 	if typeOfApp == "all" {
-		rows, err = conn.Query("SELECT * FROM applications WHERE studentID = ?", student.ID)
+		cur, err := applicationCollection.Find(context.TODO(), bson.M{"studentID": student.ID})
+		cur.All(context.TODO(), &apps)
 		if err != nil {
 			resp.Errorf(w, http.StatusInternalServerError, "error getting the applications: %v", err.Error())
 			return
 		}
 	} else {
-		rows, err = conn.Query("SELECT * FROM applications WHERE studentID = ? AND type = ?", student.ID, typeOfApp)
+		cur, err := applicationCollection.Find(context.TODO(), bson.M{"studentID": student.ID, "type": typeOfApp})
+		cur.All(context.TODO(), &apps)
 		if err != nil {
 			resp.Errorf(w, http.StatusInternalServerError, "error getting the applications: %v", err.Error())
 			return
@@ -427,25 +407,13 @@ func (h Handler) GetAllApplicationsOfStudentPrivate(w http.ResponseWriter, r *ht
 	//parse the rows into a []Application and return it
 	var applications []Application
 	var errors []string
-	for rows.Next() {
-		var app Application
-		//tmp is branch
-		var tmp, githubRepo, LastCommitHash, port, Lang, externalPort sql.NullString
-
-		err = rows.Scan(&app.ID, &app.ContainerID, &app.Status, &app.StudentID, &app.Type, &app.Name, &app.Description, &githubRepo, &LastCommitHash, &tmp, &port, &externalPort, &Lang, &app.CreatedAt, &app.IsPublic)
-		if err != nil {
-			resp.Errorf(w, http.StatusInternalServerError, "error getting the applications: %v", err.Error())
-			return
-		}
-		app.GithubRepo = githubRepo.String
-		app.LastCommitHash = LastCommitHash.String
-		app.Port = port.String
-		app.Lang = Lang.String
-		app.ExternalPort = os.Getenv("IP") + ":" + externalPort.String
-		app.IsUpdatable, err = h.util.HasLastCommitChanged(app.LastCommitHash, app.GithubRepo, app.GithubBranch)
-		if err != nil {
-			app.IsUpdatable = false
-			errors = append(errors, err.Error())
+	for _, app := range apps {
+		if app.GithubRepo != "" {
+			app.IsUpdatable, err = h.util.HasLastCommitChanged(app.LastCommitHash, app.GithubRepo, app.GithubBranch)
+			if err != nil {
+				app.IsUpdatable = false
+				errors = append(errors, err.Error())
+			}
 		}
 		if onlyUpdatable {
 			fmt.Printf("app %s is updatable: %v\n", app.Name, app.IsUpdatable)
@@ -458,6 +426,7 @@ func (h Handler) GetAllApplicationsOfStudentPrivate(w http.ResponseWriter, r *ht
 	if len(errors) > 0 {
 		resp.SuccessParse(w, http.StatusOK, fmt.Sprintf("Applications retrived, tho some errors were found: %v", errors), applications)
 		return
+
 	}
 	resp.SuccessParse(w, http.StatusOK, "Applications retrived successfully", applications)
 }
@@ -466,45 +435,31 @@ func (h Handler) GetAllApplicationsOfStudentPrivate(w http.ResponseWriter, r *ht
 //you dont need to be logged in to access this endpoint
 func (h Handler) GetAllApplicationsOfStudentPublic(w http.ResponseWriter, r *http.Request) {
 	//get the {studentID} from the url
-	studentID := mux.Vars(r)["studentID"]
+	studentID, err := strconv.Atoi(mux.Vars(r)["studentID"])
+	if err != nil {
+		resp.Error(w, http.StatusBadRequest, "The student id must be an integer")
+		return
+	}
 
 	conn, err := connectToDB()
 	if err != nil {
 		resp.Errorf(w, http.StatusInternalServerError, "error connecting to the database: %v", err.Error())
 		return
 	}
-	defer conn.Close()
+	defer conn.Client().Disconnect(context.Background())
 
-	//get all the public web applications of the student
-	rows, err := conn.Query("SELECT * FROM applications WHERE type = 'web' AND isPublic = 1 AND studentID = ?", studentID)
+	var apps []Application
+	cur, err := conn.Collection("applications").Find(context.TODO(), bson.M{"studentID": studentID, "type": "web", "isPublic": true})
 	if err != nil {
-		if err == sql.ErrNoRows {
-			resp.Error(w, http.StatusNotFound, "No applications found, check if the student id is correct")
+		if err == mongo.ErrNoDocuments {
+			resp.Errorf(w, http.StatusNotFound, "student with id %s not found", studentID)
 			return
 		}
 		resp.Errorf(w, http.StatusInternalServerError, "error getting the applications: %v", err.Error())
 		return
 	}
-
-	//parse the rows into a []Application and return it
-	var applications []Application
-	for rows.Next() {
-		var app Application
-		var tmp, githubRepo, LastCommitHash, port, Lang, externalPort sql.NullString
-
-		err = rows.Scan(&app.ID, &app.ContainerID, &app.Status, &app.StudentID, &app.Type, &app.Name, &app.Description, &githubRepo, &LastCommitHash, &tmp, &port, &externalPort, &Lang, &app.CreatedAt, &app.IsPublic)
-		if err != nil {
-			resp.Errorf(w, http.StatusInternalServerError, "error getting the applications: %v", err.Error())
-			return
-		}
-		app.GithubRepo = githubRepo.String
-		app.LastCommitHash = LastCommitHash.String
-		app.Port = port.String
-		app.Lang = Lang.String
-		app.ExternalPort = os.Getenv("IP") + ":" + externalPort.String
-		applications = append(applications, app)
-	}
-	resp.SuccessParse(w, http.StatusOK, "Public applications of "+studentID, applications)
+	cur.All(context.TODO(), &apps)
+	resp.SuccessParse(w, http.StatusOK, fmt.Sprintf("Public applications of %d", studentID), apps)
 }
 
 func (h Handler) PublishApplicationHandler(w http.ResponseWriter, r *http.Request) {
@@ -527,25 +482,15 @@ func (h Handler) PublishApplicationHandler(w http.ResponseWriter, r *http.Reques
 	}
 
 	//get the application from the database
-
-	var id int
-	err = conn.QueryRow("SELECT id FROM applications WHERE containerID = ? AND studentID = ?", containerId, student.ID).Scan(&id)
+	conn.Collection("applications").UpdateOne(context.TODO(), bson.M{"containerID": containerId, "studentID": student.ID}, bson.M{"$set": bson.M{"isPublic": true}})
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if err == mongo.ErrNoDocuments {
 			resp.Error(w, http.StatusNotFound, "No application found, check if the container id is correct or make sure you own this container")
 			return
 		}
 		resp.Errorf(w, http.StatusInternalServerError, "error getting the application: %v", err.Error())
 		return
 	}
-
-	//update the scope to public
-	_, err = conn.Exec("UPDATE applications SET isPublic = 1 WHERE containerID = ?", containerId)
-	if err != nil {
-		resp.Errorf(w, http.StatusInternalServerError, "error updating the application: %v", err.Error())
-		return
-	}
-
 	resp.Success(w, http.StatusOK, "Application published")
 }
 
@@ -568,24 +513,14 @@ func (h Handler) RevokeApplicationHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	//get the application from the database
-	var id int
-	err = conn.QueryRow("SELECT id FROM applications WHERE containerID = ? AND studentID = ?", containerId, student.ID).Scan(&id)
+	conn.Collection("applications").UpdateOne(context.TODO(), bson.M{"containerID": containerId, "studentID": student.ID}, bson.M{"$set": bson.M{"isPublic": false}})
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if err == mongo.ErrNoDocuments {
 			resp.Error(w, http.StatusNotFound, "No application found, check if the container id is correct or make sure you own this container")
 			return
 		}
 		resp.Errorf(w, http.StatusInternalServerError, "error getting the application: %v", err.Error())
 		return
 	}
-
-	//update the scope to public
-	_, err = conn.Exec("UPDATE applications SET isPublic = 0 WHERE containerID = ?", containerId)
-	if err != nil {
-		resp.Errorf(w, http.StatusInternalServerError, "error updating the application: %v", err.Error())
-		return
-	}
-
-	resp.Success(w, http.StatusOK, "Application published")
+	resp.Success(w, http.StatusOK, "Application is now private")
 }

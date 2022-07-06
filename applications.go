@@ -1,11 +1,14 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"time"
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/go-connections/nat"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 type AppPost struct {
@@ -18,22 +21,31 @@ type AppPost struct {
 }
 
 type Application struct {
-	ID             int       `json:"id"`
-	ContainerID    string    `json:"containerID"`
-	Status         string    `json:"status"`
-	StudentID      int       `json:"studentID"`
-	Type           string    `json:"type"`
-	Name           string    `json:"name"`
-	Description    string    `json:"description"`
-	GithubRepo     string    `json:"githubRepo"`
-	GithubBranch   string    `json:"githubBranch"`
-	LastCommitHash string    `json:"lastCommitHash"`
-	Port           string    `json:"port"`
-	ExternalPort   string    `json:"externalPort"`
-	Lang           string    `json:"lang"`
-	CreatedAt      time.Time `json:"createdAt"`
-	IsPublic       bool      `json:"isPublic"`
-	IsUpdatable    bool      `json:"isUpdatable"`
+	ID             primitive.ObjectID `bson:"_id" json:"-"`
+	ContainerID    string             `bson:"containerID" json:"containerID,omitempty"`
+	Status         string             `bson:"status" json:"status,omitempty"`
+	StudentID      int                `bson:"studentID" json:"studentID,omitempty"`
+	Type           string             `bson:"type" json:"type,omitempty"`
+	Name           string             `bson:"name" json:"name,omitempty"`
+	Description    string             `bson:"description" json:"description,omitempty"`
+	GithubRepo     string             `bson:"githubRepo,omitemtpy" json:"githubRepo,omitempty"`
+	GithubBranch   string             `bson:"githubBranch,omitemtpy" json:"githubBranch,omitempty"`
+	LastCommitHash string             `bson:"lastCommitHash,omitemtpy" json:"lastCommitHash,omitempty"`
+	Port           string             `bson:"port" json:"port,omitempty"`
+	ExternalPort   string             `bson:"externalPort" json:"externalPort,omitempty"`
+	Lang           string             `bson:"lang" json:"lang,omitempty"`
+	CreatedAt      time.Time          `bson:"createdAt" json:"createdAt,omitempty"`
+	IsPublic       bool               `bson:"isPublic" json:"isPublic"`
+	IsUpdatable    bool               `bson:"isUpdatable,omitempty" json:"isUpdatable"`
+	Img            string             `bson:"img,omitempty" json:"img,omitempty"`
+	Envs           []Env              `bson:"envs,omitempty" json:"envs,omitempty"`
+	Tags           []string           `bson:"tags,omitempty" json:"tags,omitempty"`
+	Stars          []string           `bson:"stars,omitempty" json:"stars,omitempty"`
+}
+
+type Env struct {
+	Key   string `bson:"key" json:"key"`
+	Value string `bson:"value" json:"value"`
 }
 
 //create a container from an image which is the one created from a student's repository
@@ -89,43 +101,42 @@ func (c ContainerController) CreateNewApplicationFromRepo(creatorID int, port, n
 
 //return the application metadata from the container id
 //it can be specified if to check if the last commit has changed and to retrive the envs
-func (c ContainerController) GetAppInfoFromContainer(containerId string, checkCommit, getEnvs bool, util *Util) (Application, map[string]string, error) {
+func (c ContainerController) GetAppInfoFromContainer(containerId string, checkCommit bool, util *Util) (Application, error) {
 	db, err := connectToDB()
 	if err != nil {
-		return Application{}, nil, err
+		return Application{}, err
 	}
-	defer db.Close()
+	defer db.Client().Disconnect(context.TODO())
 
 	var app Application
-
-	err = db.QueryRow("SELECT * FROM applications WHERE containerID = ?", containerId).Scan(&app.ID, &app.ContainerID, &app.Status, &app.StudentID, &app.Type, &app.Name, &app.Description, &app.GithubRepo, &app.LastCommitHash, &app.Port, &app.ExternalPort, &app.Lang, &app.CreatedAt, &app.IsPublic)
+	err = db.Collection("applications").FindOne(context.TODO(), bson.M{"containerID": containerId}).Decode(&app)
 	if err != nil {
-		return Application{}, nil, err
+		return Application{}, err
 	}
 
 	if checkCommit {
 		app.IsUpdatable, err = util.HasLastCommitChanged(app.LastCommitHash, app.GithubRepo, app.GithubBranch)
 		if err != nil {
-			return Application{}, nil, err
+			return Application{}, err
 		}
 	}
 
-	if getEnvs {
-		envs := make(map[string]string)
-		results, err := db.Query("SELECT * FROM envs WHERE applicationID=?", app.ID)
-		if err != nil {
-			return Application{}, nil, err
-		}
-		for results.Next() {
-			var key, value string
-			err = results.Scan(&key, &value)
-			if err != nil {
-				return Application{}, nil, err
-			}
-			envs[key] = value
-		}
-		return app, envs, nil
-	}
+	// if getEnvs {
+	// 	envs := make(map[string]string)
+	// 	results, err := db.Query("SELECT * FROM envs WHERE applicationID=?", app.ID)
+	// 	if err != nil {
+	// 		return Application{}, nil, err
+	// 	}
+	// 	for results.Next() {
+	// 		var key, value string
+	// 		err = results.Scan(&key, &value)
+	// 		if err != nil {
+	// 			return Application{}, nil, err
+	// 		}
+	// 		envs[key] = value
+	// 	}
+	// 	return app, envs, nil
+	// }
 
-	return app, nil, nil
+	return app, nil
 }

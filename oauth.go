@@ -2,11 +2,11 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
-	"database/sql"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -15,6 +15,10 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
 // struct used to get the user from paleoid
@@ -26,6 +30,13 @@ type Payload struct {
 	ClientSecret string `json:"client_secret"` //the client secret (saved in env variable)
 }
 
+type State struct {
+	Id             primitive.ObjectID `bson:"_id"`
+	State          string             `json:"state"`
+	Issued         time.Time          `bson:"issDate"`
+	ExpirationDate time.Time          `bson:"expDate"`
+}
+
 //returns a unique signed base64url encoded state string that lasts 5 minutes (saved on the database)
 func CreateState() (string, error) {
 	//connect to the db
@@ -33,27 +44,26 @@ func CreateState() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer db.Close()
+	defer db.Client().Disconnect(context.TODO())
 
+	statesCollection := db.Collection("oauthStates")
 	//generate a random state string (must not already be on the db)
 	var state string
 	for {
 		state = generateRandomString(24)
 		var duplicate string
-		err = db.QueryRow("SELECT state FROM states WHERE state = ?", state).Scan(&duplicate)
+		err = statesCollection.FindOne(context.TODO(), bson.M{"state": state}).Decode(&duplicate)
 		if err != nil {
-			if err == sql.ErrNoRows {
+			if err == mongo.ErrNoDocuments {
 				break
 			}
 		}
 	}
 
-	//save the state on the db (plain)
-	_, err = db.Exec("INSERT INTO states (state) VALUES (?)", state)
+	_, err = statesCollection.InsertOne(context.TODO(), bson.M{"state": state, "issDate": time.Now(), "expDate": time.Now().Add(time.Minute * 5)})
 	if err != nil {
 		return "", err
 	}
-
 	//encrypt the state
 	encryptedBytes, err := rsa.EncryptOAEP(
 		sha256.New(),
@@ -89,21 +99,36 @@ func CheckState(cypher string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	defer db.Close()
+	defer db.Client().Disconnect(context.TODO())
 
 	//check if the state is actually found
 	state := string(decryptedBytes)
-	var issued time.Time
-	err = db.QueryRow("SELECT issDate FROM states WHERE state = ?", state).Scan(&issued)
+
+	fmt.Println(state)
+
+	stateCollection := db.Collection("oauthStates")
+
+	var s State
+	err = stateCollection.FindOne(context.TODO(), bson.M{"state": state}).Decode(&s)
+	fmt.Println(s)
 	if err != nil {
-		return false, fmt.Errorf("state not found")
+		if err == mongo.ErrNoDocuments {
+			fmt.Println("ahhhh non ho trovato nulla :(")
+			return false, fmt.Errorf("state not found")
+
+		}
+		return false, err
 	}
 
 	//delete the state from the database and check if it's still valid
 	//(should delete it even if it's expired so we delete it before check if it's expired)
-	db.Exec("DELETE FROM states WHERE state = ?", state)
-	if time.Since(issued) > time.Minute*5 {
-		return false, fmt.Errorf("state expired, it was issued %v ago", time.Since(issued))
+	_, err = stateCollection.DeleteOne(context.TODO(), bson.M{"state": state})
+	if err != nil {
+		return false, err
+	}
+
+	if time.Since(s.Issued) > time.Minute*5 {
+		return false, fmt.Errorf("state expired, it was issued %v ago", time.Since(s.Issued))
 	}
 
 	return true, nil
@@ -159,7 +184,7 @@ func GetPaleoIDAccessToken(code string) (string, error) {
 //this section is documented on the official paleoid documentation of
 //how to retireve the student data from the access token
 //https://paleoid.stoplight.io/docs/api/b3A6NDIwMTA1Mw-ottieni-le-informazioni-dell-utente
-func GetStudent(accessToken string) (Student, error) {
+func GetStudentFromPaleoIDAccessToken(accessToken string) (Student, error) {
 	url := "https://id.paleo.bg.it/api/v2/user"
 
 	//make a get request to url with the access token as Bearer token

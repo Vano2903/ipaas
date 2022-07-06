@@ -1,10 +1,15 @@
 package main
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/rsa"
+	"fmt"
+	"os"
 
 	"github.com/joho/godotenv"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo/readpref"
 )
 
 var (
@@ -21,14 +26,18 @@ func init() {
 		panic("Error loading .env file")
 	}
 
+	DATABASE_URI = os.Getenv("DB_URI")
+	fmt.Println(DATABASE_URI)
+	JWT_SECRET = []byte(os.Getenv("JWT_SECRET"))
+
 	conn, err := connectToDB()
 	if err != nil {
 		panic("error connecting to the database: " + err.Error())
 	}
-	err = conn.Ping()
-	if err != nil {
+	if err := conn.Client().Ping(context.TODO(), readpref.Primary()); err != nil {
 		panic("error pinging the database: " + err.Error())
 	}
+	defer conn.Client().Disconnect(context.TODO())
 
 	//generate private and public keys
 	privateKey, err = rsa.GenerateKey(rand.Reader, 2048)
@@ -37,7 +46,22 @@ func init() {
 	}
 	publicKey = &privateKey.PublicKey
 
-	Langs = []string{"go", "rust", "php", "python", "java", "c#"}
+	var LangsStruct []struct {
+		Lang string
+	}
+	cur, err := conn.Collection("langs").Find(context.TODO(), bson.D{})
+	if err != nil {
+		panic("error getting supported langs " + err.Error())
+	}
+
+	err = cur.All(context.TODO(), &LangsStruct)
+	if err != nil {
+		panic("error reading supported langs " + err.Error())
+	}
+
+	for _, Lang := range LangsStruct {
+		Langs = append(Langs, Lang.Lang)
+	}
 
 	handler, err = NewHandler()
 	if err != nil {

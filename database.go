@@ -15,6 +15,7 @@ type dbContainerConfig struct {
 }
 
 type dbPost struct {
+	DbDescription     string `json:"dbDescription,omitemtpy"`
 	DbName            string `json:"databaseName"`
 	DbType            string `json:"databaseType"`
 	DbVersion         string `json:"databaseVersion"`

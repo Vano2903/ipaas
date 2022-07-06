@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -15,7 +14,8 @@ import (
 	"time"
 
 	"github.com/go-git/go-git/v5"
-	_ "github.com/go-sql-driver/mysql"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 var (
@@ -24,6 +24,8 @@ var (
 	upperCharSet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 	numberSet    = "0123456789"
 	allCharSet   = lowerCharSet + upperCharSet + numberSet
+	DATABASE_URI string
+	JWT_SECRET   []byte
 )
 
 type Util struct {
@@ -40,12 +42,12 @@ type GithubCommitInternal struct {
 }
 
 //get the student from the database given a valid access token (will be retrived from cookies)
-func (u Util) GetUserFromCookie(r *http.Request, connection *sql.DB) (Student, error) {
+func (u Util) GetUserFromCookie(r *http.Request, connection *mongo.Database) (Student, error) {
 	//search the access token in the cookies
 	var acc string
 	for _, cookie := range r.Cookies() {
 		switch cookie.Name {
-		case "accessToken":
+		case "ipaas-access-token":
 			acc = cookie.Value
 		}
 	}
@@ -185,9 +187,25 @@ func NewUtil(ctx context.Context) (*Util, error) {
 	return &Util{ctx: ctx}, nil
 }
 
-//returns a pointer to a db connection
-func connectToDB() (db *sql.DB, err error) {
-	return sql.Open("mysql", "root:root@tcp(localhost:3306)/ipaas?parseTime=true&charset=utf8mb4")
+// //returns a pointer to a db connection
+// func connectToDB() (db *sql.DB, err error) {
+// 	return sql.Open("mysql", "root:root@tcp(localhost:3306)/ipaas?parseTime=true&charset=utf8mb4")
+// 	//
+// }
+
+//returns a connection to the ipaas database
+func connectToDB() (*mongo.Database, error) {
+	//get context
+	ctx, _ := context.WithTimeout(context.TODO(), 10*time.Second)
+
+	//try to connect
+	clientOptions := options.Client().ApplyURI(DATABASE_URI)
+	client, err := mongo.Connect(ctx, clientOptions)
+	if err != nil {
+		return nil, err
+	}
+
+	return client.Database("ipaas"), nil
 }
 
 //function to generate a random alphanumerical string without spaces and with a given length

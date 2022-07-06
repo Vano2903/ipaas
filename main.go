@@ -57,6 +57,8 @@ func main() {
 	mainRouter.HandleFunc("/login", handler.LoginPageHandler)
 	mainRouter.HandleFunc("/{studentID}", handler.PublicStudentPageHandler)
 	// mainRouter.HandleFunc("/{studentID}/{appID}", handler.PublicAppPageHandler)
+
+	//homepage for the logged user
 	mainRouter.HandleFunc("/user/", handler.UserPageHandler).Methods("GET")
 
 	//user's router with access token middleware

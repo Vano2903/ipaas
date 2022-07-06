@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net/http"
 
@@ -16,7 +17,7 @@ func (h Handler) TokensMiddleware(next http.Handler) http.Handler {
 		var accessToken string
 		for _, cookie := range r.Cookies() {
 			switch cookie.Name {
-			case "accessToken":
+			case "ipaas-access-token":
 				accessToken = cookie.Value
 			}
 		}
@@ -34,10 +35,10 @@ func (h Handler) TokensMiddleware(next http.Handler) http.Handler {
 			resp.Error(w, http.StatusInternalServerError, err.Error())
 			return
 		}
-		defer db.Close()
+		defer db.Client().Disconnect(context.TODO())
 
 		//check if it's expired
-		if IsTokenExpired(true, accessToken, db) {
+		if IsJWTexpired(accessToken) {
 			resp.Error(w, 498, "Access token is expired")
 			return
 		}
