@@ -12,12 +12,12 @@ import (
 )
 
 type AppPost struct {
-	GithubRepoUrl string            `json:"github-repo"`
-	GithubBranch  string            `json:"github-branch"`
-	Language      string            `json:"language"`
-	Port          string            `json:"port"`
-	Description   string            `json:"description,omitempty"`
-	Envs          map[string]string `json:"envs,omitempty"`
+	GithubRepoUrl string `json:"github-repo"`
+	GithubBranch  string `json:"github-branch"`
+	Language      string `json:"language"`
+	Port          string `json:"port"`
+	Description   string `json:"description,omitempty"`
+	Envs          []Env  `json:"envs,omitempty"`
 }
 
 type Application struct {

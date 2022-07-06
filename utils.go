@@ -187,12 +187,6 @@ func NewUtil(ctx context.Context) (*Util, error) {
 	return &Util{ctx: ctx}, nil
 }
 
-// //returns a pointer to a db connection
-// func connectToDB() (db *sql.DB, err error) {
-// 	return sql.Open("mysql", "root:root@tcp(localhost:3306)/ipaas?parseTime=true&charset=utf8mb4")
-// 	//
-// }
-
 //returns a connection to the ipaas database
 func connectToDB() (*mongo.Database, error) {
 	//get context

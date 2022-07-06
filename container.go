@@ -26,7 +26,7 @@ type ContainerController struct {
 
 //given the creator id, port to expose (in the docker), name of the app, path for the tmp file, lang for the dockerfile and envs
 //it will return the image name, image id and a possible error
-func (c ContainerController) CreateImage(creatorID, port int, name, path, language string, envs map[string]string) (string, string, error) {
+func (c ContainerController) CreateImage(creatorID, port int, name, path, language string, envs []Env) (string, string, error) {
 	//check if the language is supported
 	var found bool
 	for _, l := range Langs {
@@ -50,8 +50,8 @@ func (c ContainerController) CreateImage(creatorID, port int, name, path, langua
 	//set the env variables in a string with syntax
 	//ENV key value
 	var envString string
-	for key, value := range envs {
-		envString += fmt.Sprintf("ENV %s %s ", key, value)
+	for _, env := range envs {
+		envString += fmt.Sprintf("ENV %s %s\n", env.Key, env.Value)
 	}
 
 	//create the dockerfile

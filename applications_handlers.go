@@ -46,6 +46,8 @@ func (h Handler) NewApplicationHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	fmt.Println(appPost)
+
 	//check that the appPost.GithubRepo is an actual url
 	if !h.util.ValidGithubUrl(appPost.GithubRepoUrl) {
 		resp.Error(w, http.StatusBadRequest, "Invalid github repo url")
@@ -119,11 +121,6 @@ func (h Handler) NewApplicationHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	fmt.Println("status:", status)
 
-	var envs []Env
-	for key, value := range appPost.Envs {
-		envs = append(envs, Env{key, value})
-	}
-
 	var app Application
 	app.ContainerID = id
 	app.Status = status
@@ -137,7 +134,7 @@ func (h Handler) NewApplicationHandler(w http.ResponseWriter, r *http.Request) {
 	app.Lang = appPost.Language
 	app.ExternalPort = exernalPort
 	app.CreatedAt = time.Now()
-	app.Envs = envs
+	app.Envs = appPost.Envs
 
 	//insert the application in the database
 	conn.Collection("applications").InsertOne(context.Background(), app)
@@ -280,13 +277,8 @@ func (h Handler) UpdateApplicationHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	envs := make(map[string]string)
-	for _, env := range app.Envs {
-		envs[env.Key] = env.Value
-	}
-
 	//create the image from the repo downloaded
-	imageName, _, err := h.cc.CreateImage(student.ID, Intport, name, repo, app.Lang, envs)
+	imageName, _, err := h.cc.CreateImage(student.ID, Intport, name, repo, app.Lang, app.Envs)
 	if err != nil {
 		resp.Errorf(w, http.StatusInternalServerError, "error creating the image: %v", err.Error())
 		return
