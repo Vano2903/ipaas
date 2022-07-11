@@ -90,7 +90,7 @@ async function loadApplications() {
         appDiv.className = 'doc';
 
         const name = document.createElement('p');
-        name.innerHTML = `<a target="_blank" href="http://${app.externalPort}">${app.name}</a>`;
+        name.innerHTML = `<a target="_blank" href="http://vano.my-wan:${app.externalPort}">${app.name}</a>`;
 
         const publicBtn = document.createElement('button');
         publicBtn.id = "public" + app.containerID;
