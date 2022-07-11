@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/go-git/go-git/v5"
-	"github.com/go-git/go-git/v5/plumbing"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
@@ -92,10 +91,10 @@ func (u Util) DownloadGithubRepo(userID int, branch, url string) (string, string
 	//get the repo name
 	fmt.Printf("downloading repo in ./tmp/%d-%s...", userID, repoName)
 	r, err := git.PlainClone(fmt.Sprintf("./tmp/%d-%s", userID, repoName), false, &git.CloneOptions{
-		URL:           url,
-		Depth:         1,
-		SingleBranch:  true,
-		ReferenceName: plumbing.ReferenceName("refs/heads/" + branch),
+		URL:          url,
+		Depth:        1,
+		SingleBranch: true,
+		// ReferenceName: plumbing.ReferenceName("refs/heads/" + branch),
 		// Progress: os.Stdout,
 	})
 	if err != nil {

@@ -13,6 +13,7 @@ import (
 	"github.com/gorilla/mux"
 	resp "github.com/vano2903/ipaas/responser"
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
@@ -122,6 +123,7 @@ func (h Handler) NewApplicationHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("status:", status)
 
 	var app Application
+	app.ID = primitive.NewObjectID()
 	app.ContainerID = id
 	app.Status = status
 	app.StudentID = student.ID
@@ -137,7 +139,11 @@ func (h Handler) NewApplicationHandler(w http.ResponseWriter, r *http.Request) {
 	app.Envs = appPost.Envs
 
 	//insert the application in the database
-	conn.Collection("applications").InsertOne(context.Background(), app)
+	_, err = conn.Collection("applications").InsertOne(context.Background(), app)
+	if err != nil {
+		resp.Errorf(w, http.StatusInternalServerError, "error inserting the application in the database: %v", err.Error())
+		return
+	}
 	toSend := map[string]interface{}{
 		"container id":  id,
 		"external_port": os.Getenv("IP") + ":" + exernalPort,
@@ -444,7 +450,7 @@ func (h Handler) GetAllApplicationsOfStudentPublic(w http.ResponseWriter, r *htt
 	cur, err := conn.Collection("applications").Find(context.TODO(), bson.M{"studentID": studentID, "type": "web", "isPublic": true})
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
-			resp.Errorf(w, http.StatusNotFound, "student with id %s not found", studentID)
+			resp.Errorf(w, http.StatusNotFound, "student with id %d not found", studentID)
 			return
 		}
 		resp.Errorf(w, http.StatusInternalServerError, "error getting the applications: %v", err.Error())

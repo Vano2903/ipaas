@@ -111,6 +111,11 @@ func (c ContainerController) CreateImage(creatorID, port int, name, path, langua
 	fmt.Println("body:", string(a))
 	//find the id of the image just created
 	var out bytes.Buffer
+
+	//check if image generated errors
+	// values := strings.Split(string(a), "\n")
+	// for _, v := range values {}
+
 	cmd := exec.CommandContext(c.ctx, "docker", "images", "-q", imageName[0])
 	cmd.Stdout = &out
 	err = cmd.Run()
