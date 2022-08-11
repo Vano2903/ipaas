@@ -40,8 +40,31 @@ type GithubCommitInternal struct {
 
 //check if a url is a valid github repo download url (github.com/name/example.git)
 //!should allow other git remotes (I.E. gitlab)
-func ValidGithubUrl(url string) bool {
-	return strings.HasSuffix(url, ".git") && strings.HasPrefix(url, "https://github.com/")
+func ValidGithubUrl(url string) (bool, error) {
+	//trim the url
+	url = strings.TrimSpace(url)
+
+	if !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
+		url = "https://" + url
+	}
+
+	if !strings.HasPrefix(url, "https://github.") &&
+		!strings.HasPrefix(url, "http://github.") &&
+		!strings.HasPrefix(url, "https://www.github.") &&
+		!strings.HasPrefix(url, "http://www.github.") {
+		return false, errors.New("url is not a github url")
+	}
+
+	resp, err := http.Get(url)
+	if err != nil {
+		return false, err
+	}
+
+	if resp.StatusCode != 200 {
+		return false, errors.New("invalid url, check if the url is correct or if the repo is not private")
+	}
+
+	return true, nil
 }
 
 //TODO: branch is not used yet, should be implemented
