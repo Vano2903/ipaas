@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -37,41 +39,41 @@ func (h Handler) OauthHandler(w http.ResponseWriter, r *http.Request) {
 	UrlState, okState := parameters["state"]
 
 	//check if a paleoid access token is stored in the session
-	if session.Values["paleoidAccessToken"] != nil {
-		paleoIDAccessToken := session.Values["paleoidAccessToken"].(string)
-		//register the user (if not alreayd registered) from the access token and generate a token pain
-		response, isClientSide, err := registerOrGenerateTokenFromPaleoIDAccessToken(paleoIDAccessToken, db)
-		if err != nil {
-			if isClientSide {
-				resp.Error(w, http.StatusBadRequest, err.Error())
-			} else {
-				resp.Error(w, http.StatusInternalServerError, err.Error())
-			}
-			return
-		}
-		//save the tokens in the session
-		//set the tokens as cookie
-		//!should set domain and path
-		http.SetCookie(w, &http.Cookie{
-			Name:    "ipaas-access-token",
-			Path:    "/",
-			Value:   response["ipaas-access-token"].(string),
-			Expires: time.Now().Add(time.Hour),
-		})
-		http.SetCookie(w, &http.Cookie{
-			Name:    "ipaas-refresh-token",
-			Path:    "/",
-			Value:   response["ipaas-refresh-token"].(string),
-			Expires: time.Now().Add(time.Hour * 24 * 7),
-		})
-		resp.SuccessParse(w, http.StatusOK, "Token generated", response)
-		return
-	}
+	// if session.Values["paleoidAccessToken"] != nil {
+	// 	paleoIDAccessToken := session.Values["paleoidAccessToken"].(string)
+	// 	//register the user (if not alreayd registered) from the access token and generate a token pain
+	// 	response, isClientSide, err := registerOrGenerateTokenFromPaleoIDAccessToken(paleoIDAccessToken, db)
+	// 	if err != nil {
+	// 		if isClientSide {
+	// 			resp.Error(w, http.StatusBadRequest, err.Error())
+	// 		} else {
+	// 			resp.Error(w, http.StatusInternalServerError, err.Error())
+	// 		}
+	// 		return
+	// 	}
+	// 	//save the tokens in the session
+	// 	//set the tokens as cookie
+	// 	//!should set domain and path
+	// 	http.SetCookie(w, &http.Cookie{
+	// 		Name:    "ipaas-access-token",
+	// 		Path:    "/",
+	// 		Value:   response["ipaas-access-token"].(string),
+	// 		Expires: time.Now().Add(time.Hour),
+	// 	})
+	// 	http.SetCookie(w, &http.Cookie{
+	// 		Name:    "ipaas-refresh-token",
+	// 		Path:    "/",
+	// 		Value:   response["ipaas-refresh-token"].(string),
+	// 		Expires: time.Now().Add(time.Hour * 24 * 7),
+	// 	})
+	// 	resp.SuccessParse(w, http.StatusOK, "Token generated", response)
+	// 	return
+	// }
 
 	//check if it's the second phase of the oauth
 	if okCode && okState {
 		//check if the state is valid (rsa envryption)
-		valid, err := CheckState(UrlState[0])
+		valid, redirectUri, err := CheckState(UrlState[0])
 		if err != nil {
 			resp.Error(w, http.StatusInternalServerError, err.Error())
 			return
@@ -118,7 +120,32 @@ func (h Handler) OauthHandler(w http.ResponseWriter, r *http.Request) {
 			Value:   "",
 			Expires: time.Unix(0, 0),
 		})
-		resp.SuccessParse(w, http.StatusOK, "Token generated", response)
+		// resp.SuccessParse(w, http.StatusOK, "Token generated", response)
+		//convert response to post body
+		r := struct {
+			AccessToken  string `json:"access_token"`
+			RefreshToken string `json:"refresh_token"`
+			UserID       int    `json:"user_id"`
+		}{
+			response["ipaas-access-token"].(string),
+			response["ipaas-refresh-token"].(string),
+			response["userID"].(int),
+		}
+
+		//convert r to io.Reader
+		body, err := json.Marshal(r)
+		if err != nil {
+			resp.Error(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		//do post request to the redirect uri sending the body
+		bodyBuffer := bytes.NewBuffer(body)
+		_, err = http.Post(redirectUri, "application/json", bodyBuffer)
+		if err != nil {
+			resp.Errorf(w, http.StatusInternalServerError, "error sending port to %s: %v", redirectUri, err.Error())
+			return
+		}
+		resp.Successf(w, http.StatusOK, "Token generated successfully, send to %s", redirectUri)
 		return
 	}
 
@@ -129,8 +156,15 @@ func (h Handler) OauthHandler(w http.ResponseWriter, r *http.Request) {
 		resp.Success(w, http.StatusOK, oauthUrl)
 		return
 	}
+
+	redirectUri, redirectOK := parameters["redirect_uri"]
+	if !redirectOK {
+		resp.Error(w, http.StatusBadRequest, "Missing redirect_uri")
+		return
+	}
+
 	//generate a new base64url encoded signed with rsa encrypted state (random string) and stored on the db (plain)
-	state, err := CreateState()
+	state, err := CreateState(redirectUri[0])
 	if err != nil {
 		resp.Error(w, http.StatusInternalServerError, err.Error())
 		return
