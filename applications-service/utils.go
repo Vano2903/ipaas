@@ -15,6 +15,7 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"gopkg.in/src-d/go-git.v4"
+	"gopkg.in/src-d/go-git.v4/plumbing"
 )
 
 var (
@@ -38,7 +39,7 @@ type GithubCommitInternal struct {
 	Message string `json:"message"`
 }
 
-//check if a url is a valid github repo download url (github.com/name/example.git)
+//check if a url is a valid github repo download url and if it exists
 //!should allow other git remotes (I.E. gitlab)
 func ValidGithubUrl(url string) (bool, error) {
 	//trim the url
@@ -67,22 +68,30 @@ func ValidGithubUrl(url string) (bool, error) {
 	return true, nil
 }
 
-//TODO: branch is not used yet, should be implemented
 //this function clone the repository from github given the url and save it in the tmp folder
 //it returns the name of the path, name and last commit hash and a possible error
 func DownloadGithubRepo(userID int, branch, url string) (string, string, string, error) {
+	url = strings.TrimSpace(url)
+
+	if !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
+		url = "https://" + url
+	}
+
 	//get the name of the repo
 	fmt.Print("getting repo name...")
-	repoName := strings.Split(strings.Replace(url, ".git", "", -1), "/")[len(strings.Split(strings.Replace(url, ".git", "", -1), "/"))-1]
+	_, repoName, err := GetUserAndNameFromRepoUrl(url)
+	if err != nil {
+		return "", "", "", err
+	}
 	fmt.Println("ok, repo name:", repoName)
 
 	//get the repo name
-	fmt.Printf("downloading repo in ./tmp/%d-%s...", userID, repoName)
-	r, err := git.PlainClone(fmt.Sprintf("./tmp/%d-%s", userID, repoName), false, &git.CloneOptions{
-		URL:          url,
-		Depth:        1,
-		SingleBranch: true,
-		// ReferenceName: plumbing.ReferenceName("refs/heads/" + branch),
+	fmt.Printf("downloading repo in ./tmp/%d-%s-%s...", userID, repoName, branch)
+	r, err := git.PlainClone(fmt.Sprintf("./tmp/%d-%s-%s", userID, repoName, branch), false, &git.CloneOptions{
+		URL:           url,
+		Depth:         1,
+		SingleBranch:  true,
+		ReferenceName: plumbing.ReferenceName("refs/heads/" + branch),
 		// Progress: os.Stdout,
 	})
 	if err != nil {
@@ -106,27 +115,41 @@ func DownloadGithubRepo(userID int, branch, url string) (string, string, string,
 
 	//remove the .git folder
 	fmt.Print("removing .git...")
-	if err := os.RemoveAll(fmt.Sprintf("./tmp/%d-%s/.git", userID, repoName)); err != nil {
+	if err := os.RemoveAll(fmt.Sprintf("./tmp/%d-%s-%s/.git", userID, repoName, branch)); err != nil {
 		return "", "", "", err
 	}
 
 	fmt.Println("ok")
-	return fmt.Sprintf("./tmp/%d-%s", userID, repoName), repoName, commitHash.Hash.String(), nil
+	return fmt.Sprintf("./tmp/%d-%s-%s", userID, repoName, branch), repoName, commitHash.Hash.String(), nil
 }
 
 //given a github repository url it will return the name of the repo and the owner
-func GetUserAndNameFromRepoUrl(url string) (string, string) {
-	url = url[19 : len(url)-4]
-	fmt.Println("new URL:", url)
+func GetUserAndNameFromRepoUrl(url string) (string, string, error) {
+	url = strings.TrimSpace(url)
+	fmt.Println("getting user and name from url:", url)
+	valid, err := ValidGithubUrl(url)
+	if err != nil {
+		return "", "", err
+	}
+	if !valid {
+		return "", "", errors.New("invalid url")
+	}
+
+	url = strings.TrimSuffix(url, ".git")
 	split := strings.Split(url, "/")
-	return split[0], split[1]
+
+	return split[len(split)-2], split[len(split)-1], nil
 }
 
 //TODO: should read just the last one not all the commits in the json
 //given the github information of a repo it will tell if the commit has changed in the remote repo
 func HasLastCommitChanged(commit, url, branch string) (bool, error) {
 	//get request to the github api
-	owner, name := GetUserAndNameFromRepoUrl(url)
+	owner, name, err := GetUserAndNameFromRepoUrl(url)
+	if err != nil {
+		return false, err
+	}
+
 	fmt.Printf("https://api.github.com/repos/%s/%s/commits?sha=%s\n", owner, name, branch)
 	req, err := http.NewRequest("GET", fmt.Sprintf("https://api.github.com/repos/%s/%s/commits?sha=%s", owner, name, branch), nil)
 	if err != nil {
@@ -176,7 +199,7 @@ func HasLastCommitChanged(commit, url, branch string) (bool, error) {
 // }
 
 //returns a connection to the ipaas database
-func connectToDB() (*mongo.Database, error) {
+func ConnectToDB() (*mongo.Database, error) {
 	//get context
 	ctx, cancel := context.WithTimeout(context.TODO(), 10*time.Second)
 	defer cancel()
@@ -191,28 +214,10 @@ func connectToDB() (*mongo.Database, error) {
 }
 
 //function to generate a random alphanumerical string without spaces and with a given length
-func generateRandomString(size int) string {
-	minNum := 4
-	minUpperCase := 4
-	passwordLength := size
-
+func GenerateRandomString(size int) string {
 	rand.Seed(time.Now().UnixNano())
 	var password strings.Builder
-
-	//Set numeric
-	for i := 0; i < minNum; i++ {
-		random := rand.Intn(len(numberSet))
-		password.WriteString(string(numberSet[random]))
-	}
-
-	//Set uppercase
-	for i := 0; i < minUpperCase; i++ {
-		random := rand.Intn(len(upperCharSet))
-		password.WriteString(string(upperCharSet[random]))
-	}
-
-	remainingLength := passwordLength - minNum - minUpperCase
-	for i := 0; i < remainingLength; i++ {
+	for i := 0; i < size; i++ {
 		random := rand.Intn(len(allCharSet))
 		password.WriteString(string(allCharSet[random]))
 	}
