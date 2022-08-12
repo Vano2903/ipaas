@@ -90,7 +90,7 @@ func (c ContainerController) CreateNewApplicationFromRepo(creatorID int, port, n
 //return the application metadata from the container id
 //it can be specified if to check if the last commit has changed and to retrive the envs
 // func (c ContainerController) GetAppInfoFromContainer(containerId string, checkCommit bool, util *Util) (Application, error) {
-// 	db, err := connectToDB()
+// 	db, err := ConnectToDB()
 // 	if err != nil {
 // 		return Application{}, err
 // 	}

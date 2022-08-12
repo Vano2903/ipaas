@@ -71,7 +71,7 @@ func (c ContainerController) CreateImage(creatorID, port int, name, path, langua
 	//create the dockerfile
 	dockerfileWithEnvs := fmt.Sprintf(string(dockerfile), name, path, envString, port)
 	//set a random name for the dockerfile
-	dockerName := "ipaas-dockerfile_" + generateRandomString(10)
+	dockerName := "ipaas-dockerfile_" + GenerateRandomString(10)
 
 	//create and write the propretary dockerfile to the repo
 	f, err := os.Create(path + "/" + dockerName)

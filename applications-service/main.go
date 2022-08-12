@@ -71,7 +71,7 @@ func init() {
 	}
 
 	//checking connection to database
-	conn, err := connectToDB()
+	conn, err := ConnectToDB()
 	if err != nil {
 		log.WithFields(log.Fields{
 			"error": err,
@@ -170,9 +170,9 @@ func main() {
 // func SetLangs(conn *mongo.Database) error {
 // 	//declaring struct for languages
 // 	lang := LangsStruct{
-// 		Lang:               "go",
-// 		DockerImageVersion: "golang:1.18-alpine",
-// 		CanBeUsed:          true,
+// 		Lang:       "go",
+// 		Dockerfile: "golang:1.18.1-alpine3.15.dockerfile",
+// 		CanBeUsed:  true,
 // 	}
 // 	_, err := conn.Collection("langs").InsertOne(context.TODO(), lang)
 // 	return err
