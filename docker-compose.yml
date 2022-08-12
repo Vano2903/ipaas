@@ -1,14 +1,14 @@
 version: "3.9"
 
 services:
-    application-service:
-      container_name: application-service-ipaas
-      restart: "no"
-      build:
-        context: ./applications-service
-        dockerfile: Dockerfile
-      networks:
-        - "ipaas"
+    # application-service:
+    #   container_name: application-service-ipaas
+    #   restart: "no"
+    #   build:
+    #     context: ./applications-service
+    #     dockerfile: Dockerfile
+    #   networks:
+    #     - "ipaas"
     db:
       image: mongo:5.0
       restart: always
@@ -16,8 +16,9 @@ services:
       environment:
         MONGO_INITDB_ROOT_USERNAME: vano
         MONGO_INITDB_ROOT_PASSWORD: vanovano
+        MONGO_INITDB_DATABASE: ipaas
       ports:
-        - 27017:27017
+        - 27018:27017
       volumes:
         - ./ipaas-db-dump/data:/data/db
       networks:
