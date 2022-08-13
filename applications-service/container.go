@@ -43,20 +43,26 @@ func NewContainerController(ctx context.Context) (*ContainerController, error) {
 func (c ContainerController) CreateImage(creatorID, port int, name, path, language string, envs []Env) (string, string, error) {
 	//check if the language is supported
 	var found bool
+	var lang LangsStruct
 	for _, l := range Langs {
 		if l.Lang == language {
 			found = true
+			lang = l
 			break
 		}
 	}
 
 	//check if it's found
 	if !found {
-		return "", "", fmt.Errorf("language %s not supported, the supported langs are: %v", language, Langs)
+		var validLanguages string
+		for _, l := range Langs {
+			validLanguages += l.Lang + ", "
+		}
+		return "", "", fmt.Errorf("language %s not supported, the supported langs are: %v", language, validLanguages)
 	}
 
 	//get the dockerfile
-	dockerfile, err := ioutil.ReadFile(fmt.Sprintf("dockerfiles/%s.dockerfile", language))
+	dockerfile, err := ioutil.ReadFile(fmt.Sprintf("dockerfiles/%s", lang.Dockerfile))
 	if err != nil {
 		return "", "", err
 	}
@@ -97,6 +103,7 @@ func (c ContainerController) CreateImage(creatorID, port int, name, path, langua
 	//create the name for the image <creatorID>-<name>-<language>
 	imageName := []string{fmt.Sprintf("%d-%s-%s", creatorID, name, language)}
 	fmt.Println("image name:", imageName[0])
+
 	//create the image from the dockerfile
 	//we are setting some default labels and the flag -rm -f
 	//!should set memory and cpu limit
@@ -123,6 +130,16 @@ func (c ContainerController) CreateImage(creatorID, port int, name, path, langua
 		return "", "", err
 	}
 	fmt.Println("body:", string(a))
+
+	imageCompiledCorrectly, err := c.CheckIfImageCompiled(imageName[0], string(a))
+	if err != nil {
+		return "", "", err
+	}
+
+	if !imageCompiledCorrectly {
+		return "", "", fmt.Errorf("image %s compiled incorrectly", imageName[0])
+	}
+
 	//find the id of the image just created
 	var out bytes.Buffer
 
@@ -138,6 +155,15 @@ func (c ContainerController) CreateImage(creatorID, port int, name, path, langua
 	}
 
 	return imageName[0], strings.Replace(out.String(), "\n", "", -1), nil
+}
+
+func (c ContainerController) CheckIfImageCompiled(imageName string, imageBuildOutput string) (bool, error) {
+	fmt.Println("image build output:", imageBuildOutput)
+	lines := strings.Split(imageBuildOutput, "\n")
+	fmt.Println("len lines:", len(lines))
+	fmt.Println("lines:", lines[len(lines)-2])
+	fmt.Println("lines:", lines[len(lines)-1])
+	return true, nil
 }
 
 //remove an image from the image id
