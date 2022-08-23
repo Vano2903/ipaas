@@ -18,7 +18,7 @@ services:
         MONGO_INITDB_ROOT_PASSWORD: vanovano
         MONGO_INITDB_DATABASE: ipaas
       ports:
-        - 27018:27017
+        - "27018:27017"
       volumes:
         - ./ipaas-db-dump/data:/data/db
       networks:
@@ -31,8 +31,8 @@ services:
         - RABBITMQ_DEFAULT_USER=vano
         - RABBITMQ_DEFAULT_PASS=adminvano
       ports:
-        - 5671:5672
-        - 15671:15672
+        - "5671:5672"
+        - "15671:15672"
       volumes:
         - ./rabbitmq/data/:/var/lib/rabbitmq/mnesia/
       networks:
@@ -43,8 +43,8 @@ services:
       networks:
       - ipaas
       ports:
-      - 16686:16686
-      - 14269:14269
+      - "16686:16686"
+      - "14269:14269"
 
 volumes:
   db:
