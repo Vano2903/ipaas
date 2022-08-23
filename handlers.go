@@ -10,8 +10,11 @@ import (
 	"os"
 	"time"
 
+	"github.com/gorilla/mux"
 	"github.com/gorilla/sessions"
 	resp "github.com/vano2903/ipaas/responser"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
 type Handler struct {
@@ -37,38 +40,6 @@ func (h Handler) OauthHandler(w http.ResponseWriter, r *http.Request) {
 	parameters := r.URL.Query()
 	UrlCode, okCode := parameters["code"]
 	UrlState, okState := parameters["state"]
-
-	//check if a paleoid access token is stored in the session
-	// if session.Values["paleoidAccessToken"] != nil {
-	// 	paleoIDAccessToken := session.Values["paleoidAccessToken"].(string)
-	// 	//register the user (if not alreayd registered) from the access token and generate a token pain
-	// 	response, isClientSide, err := registerOrGenerateTokenFromPaleoIDAccessToken(paleoIDAccessToken, db)
-	// 	if err != nil {
-	// 		if isClientSide {
-	// 			resp.Error(w, http.StatusBadRequest, err.Error())
-	// 		} else {
-	// 			resp.Error(w, http.StatusInternalServerError, err.Error())
-	// 		}
-	// 		return
-	// 	}
-	// 	//save the tokens in the session
-	// 	//set the tokens as cookie
-	// 	//!should set domain and path
-	// 	http.SetCookie(w, &http.Cookie{
-	// 		Name:    "ipaas-access-token",
-	// 		Path:    "/",
-	// 		Value:   response["ipaas-access-token"].(string),
-	// 		Expires: time.Now().Add(time.Hour),
-	// 	})
-	// 	http.SetCookie(w, &http.Cookie{
-	// 		Name:    "ipaas-refresh-token",
-	// 		Path:    "/",
-	// 		Value:   response["ipaas-refresh-token"].(string),
-	// 		Expires: time.Now().Add(time.Hour * 24 * 7),
-	// 	})
-	// 	resp.SuccessParse(w, http.StatusOK, "Token generated", response)
-	// 	return
-	// }
 
 	//check if it's the second phase of the oauth
 	if okCode && okState {
@@ -102,17 +73,29 @@ func (h Handler) OauthHandler(w http.ResponseWriter, r *http.Request) {
 		}
 		//save the tokens in the session
 
+		ipaasAccessToken := response["ipaas-access-token"].(string)
+		ipaasRefreshToken := response["ipaas-refresh-token"].(string)
+
+		randomID, isRandomIDSet := session.Values["randomID"]
+		if isRandomIDSet {
+			err = updatePollingID(randomID.(string), paleoidAccessToken, ipaasRefreshToken)
+			if err != nil {
+				resp.Errorf(w, http.StatusInternalServerError, "error update value of pollingID")
+				return
+			}
+		}
+
 		//!should set domain and path
 		http.SetCookie(w, &http.Cookie{
 			Name:    "ipaas-access-token",
 			Path:    "/",
-			Value:   response["ipaas-access-token"].(string),
+			Value:   ipaasAccessToken,
 			Expires: time.Now().Add(time.Hour),
 		})
 		http.SetCookie(w, &http.Cookie{
 			Name:    "ipaas-refresh-token",
 			Path:    "/",
-			Value:   response["ipaas-refresh-token"].(string),
+			Value:   ipaasRefreshToken,
 			Expires: time.Now().Add(time.Hour * 24 * 7),
 		})
 		http.SetCookie(w, &http.Cookie{
@@ -120,32 +103,39 @@ func (h Handler) OauthHandler(w http.ResponseWriter, r *http.Request) {
 			Value:   "",
 			Expires: time.Unix(0, 0),
 		})
-		// resp.SuccessParse(w, http.StatusOK, "Token generated", response)
-		//convert response to post body
-		r := struct {
-			AccessToken  string `json:"access_token"`
-			RefreshToken string `json:"refresh_token"`
-			UserID       int    `json:"user_id"`
-		}{
-			response["ipaas-access-token"].(string),
-			response["ipaas-refresh-token"].(string),
-			response["userID"].(int),
+
+		//if redirect uri is set send a post request with the tokens to that uri
+		//if it's empty the token will be shown has a response of the server
+		if redirectUri == "" {
+			//convert response to post body
+			r := struct {
+				AccessToken  string `json:"access_token"`
+				RefreshToken string `json:"refresh_token"`
+				UserID       int    `json:"user_id"`
+			}{
+				ipaasAccessToken,
+				ipaasRefreshToken,
+				response["userID"].(int),
+			}
+
+			//convert r to io.Reader
+			body, err := json.Marshal(r)
+			if err != nil {
+				resp.Error(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			//do post request to the redirect uri sending the body
+			bodyBuffer := bytes.NewBuffer(body)
+			_, err = http.Post(redirectUri, "application/json", bodyBuffer)
+			if err != nil {
+				resp.Errorf(w, http.StatusInternalServerError, "error sending port to %s: %v", redirectUri, err.Error())
+				return
+			}
+			resp.Successf(w, http.StatusOK, "Token generated successfully, a post request has been sent to %s", redirectUri)
+			return
 		}
 
-		//convert r to io.Reader
-		body, err := json.Marshal(r)
-		if err != nil {
-			resp.Error(w, http.StatusInternalServerError, err.Error())
-			return
-		}
-		//do post request to the redirect uri sending the body
-		bodyBuffer := bytes.NewBuffer(body)
-		_, err = http.Post(redirectUri, "application/json", bodyBuffer)
-		if err != nil {
-			resp.Errorf(w, http.StatusInternalServerError, "error sending port to %s: %v", redirectUri, err.Error())
-			return
-		}
-		resp.Successf(w, http.StatusOK, "Token generated successfully, send to %s", redirectUri)
+		resp.SuccessParse(w, http.StatusOK, "Token generated successfully", response)
 		return
 	}
 
@@ -158,28 +148,88 @@ func (h Handler) OauthHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	redirectUri, redirectOK := parameters["redirect_uri"]
-	if !redirectOK {
-		resp.Error(w, http.StatusBadRequest, "Missing redirect_uri")
-		return
-	}
+
+	_, pollingIDOK := parameters["generate_polling_id"]
 
 	//generate a new base64url encoded signed with rsa encrypted state (random string) and stored on the db (plain)
-	state, err := CreateState(redirectUri[0])
+	state, randomID, err := CreateState(redirectUri[0], redirectOK, pollingIDOK)
 	if err != nil {
 		resp.Error(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	//set the state on the session
 	session.Values["state"] = state
-	err = session.Save(r, w)
-	if err != nil {
-		log.Println(err)
+
+	if pollingIDOK {
+		session.Values["randomID"] = randomID
+	}
+
+	if err := session.Save(r, w); err != nil {
 		resp.Error(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
 	oauthUrl := fmt.Sprintf("https://id.paleo.bg.it/oauth/authorize?client_id=%s&response_type=code&state=%s&redirect_uri=%s", os.Getenv("OAUTH_ID"), state, os.Getenv("REDIRECT_URI"))
-	resp.Success(w, http.StatusOK, oauthUrl)
+
+	if pollingIDOK {
+		response := map[string]string{"oauthUrl": oauthUrl, "randomID": randomID}
+		resp.SuccessParse(w, http.StatusOK, "paleoid login url", response)
+	} else {
+		resp.Success(w, http.StatusOK, oauthUrl)
+	}
+}
+
+func (h Handler) CheckOauthState(w http.ResponseWriter, r *http.Request) {
+	pollingID, pollingIDexists := mux.Vars(r)["randomID"]
+	if !pollingIDexists {
+		resp.Error(w, http.StatusBadRequest, "no polling id found in the session")
+		return
+	}
+
+	db, err := connectToDB()
+	if err != nil {
+		resp.Errorf(w, http.StatusInternalServerError, "unable to connect to database: %s", err.Error())
+		return
+	}
+
+	id := make(map[string]interface{})
+	pollingCollection := db.Collection("pollingIDs")
+	err = pollingCollection.FindOne(context.Background(), bson.M{"id": pollingID}).Decode(&id)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			resp.Error(w, http.StatusBadRequest, "polling id not found")
+		} else {
+			resp.Errorf(w, http.StatusInternalServerError, "error getting the id from the database: %s", err.Error())
+		}
+		return
+	}
+
+	if id["expDate"].(time.Time).Before(time.Now()) {
+		_, err = pollingCollection.DeleteOne(context.TODO(), bson.M{"id": pollingID})
+		if err != nil {
+			resp.Errorf(w, http.StatusInternalServerError, "error deleting id from database: %s", err.Error())
+		} else {
+			resp.Error(w, http.StatusBadRequest, "id has expired")
+		}
+		return
+	}
+
+	response := make(map[string]interface{})
+	if !id["loginSuccessful"].(bool) {
+		response["loggedIn"] = false
+		resp.ErrorParse(w, http.StatusBadRequest, "user not logged in yet", response)
+		return
+	}
+
+	response["loggedIn"] = true
+	response["accessToken"] = id["accessToken"]
+	response["refreshToke"] = id["refreshToken"]
+	_, err = pollingCollection.DeleteOne(context.TODO(), bson.M{"id": pollingID})
+	if err != nil {
+		resp.Errorf(w, http.StatusInternalServerError, "error deleting id from database: %s", err.Error())
+		return
+	}
+	resp.SuccessParse(w, http.StatusBadRequest, "user logged in correctly, this token can't be used anymore now", response)
 }
 
 //get the user's informations from the ipaas access token

@@ -75,6 +75,7 @@ func main() {
 
 	//! PUBLIC HANDLERS
 	api.HandleFunc("/oauth", handler.OauthHandler).Methods("GET")
+	api.HandleFunc("/oauth/check/{randomID}", handler.CheckOauthState).Methods("GET")
 	api.HandleFunc("/tokens/new", handler.NewTokenPairFromRefreshTokenHandler).Methods("GET")
 	api.HandleFunc("/{studentID}/all", handler.GetAllApplicationsOfStudentPublic).Methods("GET")
 	// api.HandleFunc("/{studentID}/{appID}", handler.GetInfoApplication).Methods("GET")
