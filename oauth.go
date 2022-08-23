@@ -39,11 +39,11 @@ type State struct {
 }
 
 //returns a unique signed base64url encoded state string that lasts 5 minutes (saved on the database)
-func CreateState(redirectUri string) (string, error) {
+func CreateState(redirectUri string, saveRedirectUri, savePollingId bool) (string, string, error) {
 	//connect to the db
 	db, err := connectToDB()
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	defer db.Client().Disconnect(context.TODO())
 
@@ -61,10 +61,35 @@ func CreateState(redirectUri string) (string, error) {
 		}
 	}
 
-	_, err = statesCollection.InsertOne(context.TODO(), bson.M{"redirectUri": redirectUri, "state": state, "issDate": time.Now(), "expDate": time.Now().Add(time.Minute * 5)})
-	if err != nil {
-		return "", err
+	insert := bson.M{"state": state, "issDate": time.Now(), "expDate": time.Now().Add(time.Minute * 5)}
+	if saveRedirectUri {
+		insert["redirectUri"] = redirectUri
 	}
+	_, err = statesCollection.InsertOne(context.TODO(), insert)
+	if err != nil {
+		return "", "", err
+	}
+
+	var pollingID string
+	if savePollingId {
+		pollingCollection := db.Collection("pollingIDs")
+		for {
+			pollingID = generateRandomString(24)
+			var duplicate string
+			err = pollingCollection.FindOne(context.TODO(), bson.M{"id": pollingID}).Decode(&duplicate)
+			if err != nil {
+				if err == mongo.ErrNoDocuments {
+					break
+				}
+			}
+		}
+		insertPolling := bson.M{"id": pollingID, "issDate": time.Now(), "expDate": time.Now().Add(time.Minute * 5), "loginSuccessful": false}
+		_, err = pollingCollection.InsertOne(context.TODO(), insertPolling)
+		if err != nil {
+			return "", "", err
+		}
+	}
+
 	//encrypt the state
 	encryptedBytes, err := rsa.EncryptOAEP(
 		sha256.New(),
@@ -73,11 +98,11 @@ func CreateState(redirectUri string) (string, error) {
 		[]byte(state),
 		nil)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 
 	//encode the encrypted state with base64url
-	return base64.StdEncoding.EncodeToString(encryptedBytes), nil
+	return base64.StdEncoding.EncodeToString(encryptedBytes), pollingID, nil
 }
 
 //check if the encrypted state is valid and if so returnes true and delete the state from the database
@@ -132,6 +157,28 @@ func CheckState(cypher string) (bool, string, error) {
 	}
 
 	return true, s.RedirectUri, nil
+}
+
+func updatePollingID(randomID, accessToken, refreshToken string) error {
+	db, err := connectToDB()
+	if err != nil {
+		return err
+	}
+
+	pollingCollection := db.Collection("pollingIDs")
+
+	var found string
+	err = pollingCollection.FindOne(context.TODO(), bson.M{"id": randomID}).Decode(&found)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return fmt.Errorf("%s was not found", randomID)
+		} else {
+			return err
+		}
+	}
+
+	_, err = pollingCollection.UpdateOne(context.TODO(), bson.M{"id": randomID}, bson.M{"accessToken": accessToken, "refreshToken": refreshToken, "loginSuccessful": true})
+	return err
 }
 
 //given the code generate from the paleoid server it returns the access token of the student
