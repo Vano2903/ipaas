@@ -13,15 +13,15 @@ import (
 )
 
 const (
-	service         = "applications-service"
-	listeningQueue  = "send-applications"
-	respondingQueue = "receive-applications"
+	//service         = "applications-service"
+	listeningQueue = "send-applications"
+	//respondingQueue = "receive-applications"
 )
 
 var (
-	MONGO_URI string
-	AMPQ_URL  string
-	Langs     []LangsStruct
+	MongoUri string
+	AmpqUrl  string
+	Langs    []LangsStruct
 )
 
 type LangsStruct struct {
@@ -61,12 +61,12 @@ func init() {
 	}
 
 	//checking if all envs are set
-	MONGO_URI = os.Getenv("MONGO_URI")
-	if MONGO_URI == "" {
+	MongoUri = os.Getenv("MONGO_URI")
+	if MongoUri == "" {
 		log.Fatal("MONGO_URI is not set in .env file")
 	}
-	AMPQ_URL = os.Getenv("AMPQ_URL")
-	if AMPQ_URL == "" {
+	AmpqUrl = os.Getenv("AMPQ_URL")
+	if AmpqUrl == "" {
 		log.Fatal("AMPQ_URL is not set in .env file")
 	}
 
@@ -82,7 +82,14 @@ func init() {
 			"error": err,
 		}).Fatal("Error pinging the database")
 	}
-	defer conn.Client().Disconnect(context.Background())
+	defer func(client *mongo.Client, ctx context.Context) {
+		err := client.Disconnect(ctx)
+		if err != nil {
+			log.WithFields(log.Fields{
+				"error": err,
+			}).Fatal("Error disconnecting from database")
+		}
+	}(conn.Client(), context.Background())
 
 	if err := LoadAvailableLangs(conn); err != nil {
 		log.WithFields(log.Fields{
@@ -106,13 +113,20 @@ func LoadAvailableLangs(conn *mongo.Database) error {
 
 func main() {
 	log.Debug("Connecting to RabbitMQ")
-	conn, err := amqp.Dial(AMPQ_URL)
+	conn, err := amqp.Dial(AmpqUrl)
 	if err != nil {
 		log.WithFields(log.Fields{
 			"error": err,
 		}).Fatal("error connecting to rabbitmq")
 	}
-	defer conn.Close()
+	defer func(conn *amqp.Connection) {
+		err := conn.Close()
+		if err != nil {
+			log.WithFields(log.Fields{
+				"error": err,
+			}).Fatal("error closing connection to rabbitmq")
+		}
+	}(conn)
 
 	ch, err := conn.Channel()
 	if err != nil {
@@ -120,7 +134,14 @@ func main() {
 			"error": err,
 		}).Fatal("error creating channel")
 	}
-	defer ch.Close()
+	defer func(ch *amqp.Channel) {
+		err := ch.Close()
+		if err != nil {
+			log.WithFields(log.Fields{
+				"error": err,
+			}).Fatal("error closing channel")
+		}
+	}(ch)
 
 	log.Debugf("Declaring queue %s", listeningQueue)
 	q, err := ch.QueueDeclare(

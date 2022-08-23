@@ -6,7 +6,6 @@ ENV IPAAS_REPO %s
 
 %s
 
-
 WORKDIR /go/src/$IPAAS_APP_NAME
 
 COPY . .

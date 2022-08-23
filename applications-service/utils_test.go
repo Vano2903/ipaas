@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"go.mongodb.org/mongo-driver/mongo"
 	"os"
 	"testing"
 
@@ -10,7 +11,7 @@ import (
 )
 
 func TestValidGithubUrl(t *testing.T) {
-	assert := assert.New(t)
+	assertions := assert.New(t)
 	urls := []struct {
 		Url         string
 		Valid       bool
@@ -34,14 +35,14 @@ func TestValidGithubUrl(t *testing.T) {
 				t.Errorf("error validating %s: %v", url.Url, err)
 			}
 		} else {
-			assert.Error(err)
+			assertions.Error(err)
 		}
-		assert.Equal(valid, url.Valid)
+		assertions.Equal(valid, url.Valid)
 	}
 }
 
 func TestDownloadGithubRepo(t *testing.T) {
-	assert := assert.New(t)
+	assertions := assert.New(t)
 
 	urls := []struct {
 		Url         string
@@ -60,24 +61,26 @@ func TestDownloadGithubRepo(t *testing.T) {
 	for _, url := range urls {
 		path, _, _, err := DownloadGithubRepo(userID, url.Branch, url.Url)
 		if !url.ShouldError {
-			assert.NoError(err)
+			assertions.NoError(err)
 			paths = append(paths, path)
 		} else {
 			fmt.Println(err)
-			assert.Error(err)
+			assertions.Error(err)
 		}
 	}
 
 	t.Cleanup(func() {
 		//remove the tmp folder
 		for _, path := range paths {
-			os.RemoveAll(path)
+			if err := os.RemoveAll(path); err != nil {
+				fmt.Printf("error removing path: %s, reason: %v\n", path, err)
+			}
 		}
 	})
 }
 
 func TestGetUserAndNameFromRepoUrl(t *testing.T) {
-	assert := assert.New(t)
+	assertions := assert.New(t)
 	urls := []struct {
 		Url         string
 		Name        string
@@ -102,30 +105,35 @@ func TestGetUserAndNameFromRepoUrl(t *testing.T) {
 				t.Errorf("error validating %s: %v", url.Url, err)
 			}
 		} else {
-			assert.Error(err)
+			assertions.Error(err)
 		}
-		assert.Equal(name, url.Name)
-		assert.Equal(repo, url.Repo)
+		assertions.Equal(name, url.Name)
+		assertions.Equal(repo, url.Repo)
 	}
 }
 
 func TestConnectToDB(t *testing.T) {
-	assert := assert.New(t)
+	assertions := assert.New(t)
 	connection, err := ConnectToDB()
-	assert.NoError(err)
+	assertions.NoError(err)
 
-	defer connection.Client().Disconnect(context.Background())
-	assert.NotNil(connection)
+	defer func(client *mongo.Client, ctx context.Context) {
+		err := client.Disconnect(ctx)
+		if err != nil {
+			fmt.Printf("error disconnecting from db: %v\n", err)
+		}
+	}(connection.Client(), context.Background())
+	assertions.NotNil(connection)
 
 	err = connection.Client().Ping(context.Background(), nil)
-	assert.NoError(err)
+	assertions.NoError(err)
 }
 
 func TestGenerateRandomString(t *testing.T) {
-	assert := assert.New(t)
+	assertions := assert.New(t)
 	lengths := []int{0, 1, 10, 24, 100, 1000, 100000}
 	for _, length := range lengths {
 		randomString := GenerateRandomString(length)
-		assert.Equal(length, len(randomString))
+		assertions.Equal(length, len(randomString))
 	}
 }
