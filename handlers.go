@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"log"
 	"net/http"
 	"os"
@@ -25,8 +26,8 @@ type Handler struct {
 
 //!===========================GENERICS HANDLERS
 
-//oauth handler, will handle the 2 steps of the oauth process
-//all the procedure is in https://paleoid.stoplight.io/docs/api/YXBpOjQxNDY4NTk-paleo-id-o-auth2-api
+// oauth handler, will handle the 2 steps of the oauth process
+// all the procedure is in https://paleoid.stoplight.io/docs/api/YXBpOjQxNDY4NTk-paleo-id-o-auth2-api
 func (h Handler) OauthHandler(w http.ResponseWriter, r *http.Request) {
 	//connect to the db
 	db, err := connectToDB()
@@ -43,8 +44,8 @@ func (h Handler) OauthHandler(w http.ResponseWriter, r *http.Request) {
 
 	//check if it's the second phase of the oauth
 	if okCode && okState {
-		//check if the state is valid (rsa envryption)
-		valid, redirectUri, err := CheckState(UrlState[0])
+		//check if the state is valid (rsa encryption)
+		valid, redirectUri, state, err := CheckState(UrlState[0])
 		if err != nil {
 			resp.Error(w, http.StatusInternalServerError, err.Error())
 			return
@@ -71,16 +72,17 @@ func (h Handler) OauthHandler(w http.ResponseWriter, r *http.Request) {
 			}
 			return
 		}
-		//save the tokens in the session
 
 		ipaasAccessToken := response["ipaas-access-token"].(string)
 		ipaasRefreshToken := response["ipaas-refresh-token"].(string)
 
-		randomID, isRandomIDSet := session.Values["randomID"]
-		if isRandomIDSet {
-			err = updatePollingID(randomID.(string), paleoidAccessToken, ipaasRefreshToken)
-			if err != nil {
-				resp.Errorf(w, http.StatusInternalServerError, "error update value of pollingID")
+		randomID, randomIDFound, err := GetPollingIDFromState(state, db)
+		fmt.Println("randomID", randomID)
+		fmt.Println("randomIDFound", randomIDFound)
+		fmt.Println("state:", state)
+		if randomIDFound {
+			if err := UpdatePollingID(randomID, paleoidAccessToken, ipaasRefreshToken); err != nil {
+				resp.Errorf(w, http.StatusInternalServerError, "error update value of pollingID: %v", err)
 				return
 			}
 		}
@@ -106,7 +108,7 @@ func (h Handler) OauthHandler(w http.ResponseWriter, r *http.Request) {
 
 		//if redirect uri is set send a post request with the tokens to that uri
 		//if it's empty the token will be shown has a response of the server
-		if redirectUri == "" {
+		if redirectUri != "" {
 			//convert response to post body
 			r := struct {
 				AccessToken  string `json:"access_token"`
@@ -152,17 +154,20 @@ func (h Handler) OauthHandler(w http.ResponseWriter, r *http.Request) {
 	_, pollingIDOK := parameters["generate_polling_id"]
 
 	//generate a new base64url encoded signed with rsa encrypted state (random string) and stored on the db (plain)
-	state, randomID, err := CreateState(redirectUri[0], redirectOK, pollingIDOK)
+	var state, randomID string
+	if redirectOK {
+		state, randomID, err = CreateState(redirectUri[0], redirectOK, pollingIDOK)
+	} else {
+		state, randomID, err = CreateState("", redirectOK, pollingIDOK)
+	}
+	fmt.Println("state: ", state)
+	fmt.Println("randomID: ", randomID)
 	if err != nil {
 		resp.Error(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	//set the state on the session
 	session.Values["state"] = state
-
-	if pollingIDOK {
-		session.Values["randomID"] = randomID
-	}
 
 	if err := session.Save(r, w); err != nil {
 		resp.Error(w, http.StatusInternalServerError, err.Error())
@@ -204,7 +209,9 @@ func (h Handler) CheckOauthState(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if id["expDate"].(time.Time).Before(time.Now()) {
+	expDate := id["expDate"].(primitive.DateTime).Time()
+
+	if expDate.Before(time.Now()) {
 		_, err = pollingCollection.DeleteOne(context.TODO(), bson.M{"id": pollingID})
 		if err != nil {
 			resp.Errorf(w, http.StatusInternalServerError, "error deleting id from database: %s", err.Error())
@@ -232,7 +239,7 @@ func (h Handler) CheckOauthState(w http.ResponseWriter, r *http.Request) {
 	resp.SuccessParse(w, http.StatusBadRequest, "user logged in correctly, this token can't be used anymore now", response)
 }
 
-//get the user's informations from the ipaas access token
+// get the user's informations from the ipaas access token
 func (h Handler) LoginHandler(w http.ResponseWriter, r *http.Request) {
 	db, err := connectToDB()
 	if err != nil {
@@ -266,7 +273,7 @@ func (h Handler) LoginHandler(w http.ResponseWriter, r *http.Request) {
 	resp.SuccessParse(w, http.StatusOK, "User", student)
 }
 
-//generate a new token pair from the refresh token saved in the cookies
+// generate a new token pair from the refresh token saved in the cookies
 func (h Handler) NewTokenPairFromRefreshTokenHandler(w http.ResponseWriter, r *http.Request) {
 	//get the refresh token from the cookie
 	cookie, err := r.Cookie("ipaas-refresh-token")
@@ -353,7 +360,7 @@ func (h Handler) NewTokenPairFromRefreshTokenHandler(w http.ResponseWriter, r *h
 
 //!===========================PAGES HANDLERS
 
-//constructor
+// constructor
 func NewHandler() (*Handler, error) {
 	var h Handler
 	var err error

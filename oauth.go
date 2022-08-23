@@ -38,7 +38,16 @@ type State struct {
 	RedirectUri    string             `bson:"redirectUri"`
 }
 
-//returns a unique signed base64url encoded state string that lasts 5 minutes (saved on the database)
+type Polling struct {
+	DBId            primitive.ObjectID `bson:"_id"`
+	RandomId        string             `bson:"id"`
+	IssDate         time.Time          `bson:"issDate"`
+	ExpDate         time.Time          `bson:"expDate"`
+	LoginSuccessful bool               `bson:"loginSuccessful"`
+}
+
+// TODO: should separate the generation of the polling id from this function and put it in a separate function
+// returns a unique signed base64url encoded state string that lasts 5 minutes (saved on the database)
 func CreateState(redirectUri string, saveRedirectUri, savePollingId bool) (string, string, error) {
 	//connect to the db
 	db, err := connectToDB()
@@ -83,7 +92,7 @@ func CreateState(redirectUri string, saveRedirectUri, savePollingId bool) (strin
 				}
 			}
 		}
-		insertPolling := bson.M{"id": pollingID, "issDate": time.Now(), "expDate": time.Now().Add(time.Minute * 5), "loginSuccessful": false}
+		insertPolling := bson.M{"id": pollingID, "state": state, "issDate": time.Now(), "expDate": time.Now().Add(time.Minute * 5), "loginSuccessful": false}
 		_, err = pollingCollection.InsertOne(context.TODO(), insertPolling)
 		if err != nil {
 			return "", "", err
@@ -105,61 +114,72 @@ func CreateState(redirectUri string, saveRedirectUri, savePollingId bool) (strin
 	return base64.StdEncoding.EncodeToString(encryptedBytes), pollingID, nil
 }
 
-//check if the encrypted state is valid and if so returnes true and delete the state from the database
-func CheckState(cypher string) (bool, string, error) {
+// check if the encrypted state is valid and if so returnes true and delete the state from the database
+func CheckState(cypher string) (valid bool, redirectUri string, state string, err error) {
 	//replace the spaces with + signs in the cypher
 	cypher = strings.Replace(cypher, " ", "+", -1)
 	//decode the cypher with base64url
 	decoded, err := base64.StdEncoding.DecodeString(cypher)
 	if err != nil {
-		return false, "", err
+		return false, "", "", err
 	}
 
 	//decrypt the cypher with the private key
 	decryptedBytes, err := privateKey.Decrypt(nil, decoded, &rsa.OAEPOptions{Hash: crypto.SHA256})
 	if err != nil {
-		return false, "", err
+		return false, "", "", err
 	}
 
 	db, err := connectToDB()
 	if err != nil {
-		return false, "", err
+		return false, "", "", err
 	}
 	defer db.Client().Disconnect(context.TODO())
 
 	//check if the state is actually found
-	state := string(decryptedBytes)
-
+	state = string(decryptedBytes)
 	fmt.Println(state)
 
 	stateCollection := db.Collection("oauthStates")
-
 	var s State
 	err = stateCollection.FindOne(context.TODO(), bson.M{"state": state}).Decode(&s)
 	fmt.Println(s)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			fmt.Println("ahhhh non ho trovato nulla :(")
-			return false, "", fmt.Errorf("state not found")
+			return false, "", "", fmt.Errorf("state not found")
 		}
-		return false, "", err
+		return false, "", "", err
 	}
 
 	//delete the state from the database and check if it's still valid
 	//(should delete it even if it's expired so we delete it before check if it's expired)
 	_, err = stateCollection.DeleteOne(context.TODO(), bson.M{"state": state})
 	if err != nil {
-		return false, "", err
+		return false, "", "", err
 	}
 
 	if time.Since(s.Issued) > time.Minute*5 {
-		return false, "", fmt.Errorf("state expired, it was issued %v ago", time.Since(s.Issued))
+		return false, "", "", fmt.Errorf("state expired, it was issued %v ago", time.Since(s.Issued))
 	}
 
-	return true, s.RedirectUri, nil
+	return true, s.RedirectUri, state, nil
 }
 
-func updatePollingID(randomID, accessToken, refreshToken string) error {
+func GetPollingIDFromState(state string, connection *mongo.Database) (pollingID string, found bool, err error) {
+	var polling Polling
+	pollingCollection := connection.Collection("pollingIDs")
+	err = pollingCollection.FindOne(context.TODO(), bson.M{"state": state}).Decode(&polling)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return "", false, nil
+		}
+		return "", false, err
+	}
+	return polling.RandomId, true, nil
+}
+
+func UpdatePollingID(randomID, accessToken, refreshToken string) error {
 	db, err := connectToDB()
 	if err != nil {
 		return err
@@ -167,7 +187,7 @@ func updatePollingID(randomID, accessToken, refreshToken string) error {
 
 	pollingCollection := db.Collection("pollingIDs")
 
-	var found string
+	var found Polling
 	err = pollingCollection.FindOne(context.TODO(), bson.M{"id": randomID}).Decode(&found)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
@@ -176,14 +196,15 @@ func updatePollingID(randomID, accessToken, refreshToken string) error {
 			return err
 		}
 	}
-
-	_, err = pollingCollection.UpdateOne(context.TODO(), bson.M{"id": randomID}, bson.M{"accessToken": accessToken, "refreshToken": refreshToken, "loginSuccessful": true})
+	
+	update := bson.D{{"$set", bson.D{{"accessToken", accessToken}, {"refreshToken", refreshToken}, {"loginSuccessful", true}}}}
+	_, err = pollingCollection.UpdateOne(context.TODO(), bson.M{"id": randomID}, update)
 	return err
 }
 
-//given the code generate from the paleoid server it returns the access token of the student
-//this section is documented on the official paleoid documentation of how to retireve the access token
-//https://paleoid.stoplight.io/docs/api/b3A6NDE0Njg2Mw-ottieni-un-access-token
+// given the code generate from the paleoid server it returns the access token of the student
+// this section is documented on the official paleoid documentation of how to retireve the access token
+// https://paleoid.stoplight.io/docs/api/b3A6NDE0Njg2Mw-ottieni-un-access-token
 func GetPaleoIDAccessToken(code string) (string, error) {
 	//do post request to url with the code and the env variables
 	//(they are envs cause they are private and saved in the .env)
@@ -227,10 +248,10 @@ func GetPaleoIDAccessToken(code string) (string, error) {
 	return accessToken, nil
 }
 
-//return a student struct given the access token
-//this section is documented on the official paleoid documentation of
-//how to retireve the student data from the access token
-//https://paleoid.stoplight.io/docs/api/b3A6NDIwMTA1Mw-ottieni-le-informazioni-dell-utente
+// return a student struct given the access token
+// this section is documented on the official paleoid documentation of
+// how to retireve the student data from the access token
+// https://paleoid.stoplight.io/docs/api/b3A6NDIwMTA1Mw-ottieni-le-informazioni-dell-utente
 func GetStudentFromPaleoIDAccessToken(accessToken string) (Student, error) {
 	url := "https://id.paleo.bg.it/api/v2/user"
 
