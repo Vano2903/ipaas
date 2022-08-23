@@ -1,4 +1,5 @@
 .env
 ipaas-db-dump/
 tmp/
+rabbitmq/
 .idea/

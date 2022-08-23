@@ -35,10 +35,11 @@ type State struct {
 	State          string             `json:"state"`
 	Issued         time.Time          `bson:"issDate"`
 	ExpirationDate time.Time          `bson:"expDate"`
+	RedirectUri    string             `bson:"redirectUri"`
 }
 
 //returns a unique signed base64url encoded state string that lasts 5 minutes (saved on the database)
-func CreateState() (string, error) {
+func CreateState(redirectUri string) (string, error) {
 	//connect to the db
 	db, err := connectToDB()
 	if err != nil {
@@ -60,7 +61,7 @@ func CreateState() (string, error) {
 		}
 	}
 
-	_, err = statesCollection.InsertOne(context.TODO(), bson.M{"state": state, "issDate": time.Now(), "expDate": time.Now().Add(time.Minute * 5)})
+	_, err = statesCollection.InsertOne(context.TODO(), bson.M{"redirectUri": redirectUri, "state": state, "issDate": time.Now(), "expDate": time.Now().Add(time.Minute * 5)})
 	if err != nil {
 		return "", err
 	}
@@ -80,24 +81,24 @@ func CreateState() (string, error) {
 }
 
 //check if the encrypted state is valid and if so returnes true and delete the state from the database
-func CheckState(cypher string) (bool, error) {
+func CheckState(cypher string) (bool, string, error) {
 	//replace the spaces with + signs in the cypher
 	cypher = strings.Replace(cypher, " ", "+", -1)
 	//decode the cypher with base64url
 	decoded, err := base64.StdEncoding.DecodeString(cypher)
 	if err != nil {
-		return false, err
+		return false, "", err
 	}
 
 	//decrypt the cypher with the private key
 	decryptedBytes, err := privateKey.Decrypt(nil, decoded, &rsa.OAEPOptions{Hash: crypto.SHA256})
 	if err != nil {
-		return false, err
+		return false, "", err
 	}
 
 	db, err := connectToDB()
 	if err != nil {
-		return false, err
+		return false, "", err
 	}
 	defer db.Client().Disconnect(context.TODO())
 
@@ -114,24 +115,23 @@ func CheckState(cypher string) (bool, error) {
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			fmt.Println("ahhhh non ho trovato nulla :(")
-			return false, fmt.Errorf("state not found")
-
+			return false, "", fmt.Errorf("state not found")
 		}
-		return false, err
+		return false, "", err
 	}
 
 	//delete the state from the database and check if it's still valid
 	//(should delete it even if it's expired so we delete it before check if it's expired)
 	_, err = stateCollection.DeleteOne(context.TODO(), bson.M{"state": state})
 	if err != nil {
-		return false, err
+		return false, "", err
 	}
 
 	if time.Since(s.Issued) > time.Minute*5 {
-		return false, fmt.Errorf("state expired, it was issued %v ago", time.Since(s.Issued))
+		return false, "", fmt.Errorf("state expired, it was issued %v ago", time.Since(s.Issued))
 	}
 
-	return true, nil
+	return true, s.RedirectUri, nil
 }
 
 //given the code generate from the paleoid server it returns the access token of the student

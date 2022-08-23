@@ -8,6 +8,17 @@
 
 Webapp that let students from the Itis [P.Paleocapa](https://www.itispaleocapa.edu.it/) host their (for now) web applications on the school's servers.
 
+**Start up:**
+after creating the mongodb database connect to it and create the following collections:
+
+- users
+- applications
+- langs
+- oauthStates
+- refreshTokens
+
+then import the `langs.json` file in the `langs` collection.
+
 **users:**
 
 | user ID | name    |                                                                      description                                                                      |

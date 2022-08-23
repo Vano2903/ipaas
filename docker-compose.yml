@@ -20,6 +20,7 @@ services:
       environment:
         MONGO_INITDB_ROOT_USERNAME: vano
         MONGO_INITDB_ROOT_PASSWORD: vanovano
+        MONGO_INITDB_DATABASE: ipaas
       ports:
         - 27017:27017
       volumes:
