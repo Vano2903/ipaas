@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"math/rand"
 	"net/http"
 	"os"
@@ -39,9 +39,10 @@ type GithubCommitInternal struct {
 	Message string `json:"message"`
 }
 
-//check if a url is a valid github repo download url and if it exists
-//!should allow other git remotes (I.E. gitlab)
+// ValidGithubUrl check if an url is a valid and existing GitHub repo url
+// !should allow other git remotes (I.E. gitlab)
 func ValidGithubUrl(url string) (bool, error) {
+
 	//trim the url
 	url = strings.TrimSpace(url)
 
@@ -68,8 +69,8 @@ func ValidGithubUrl(url string) (bool, error) {
 	return true, nil
 }
 
-//this function clone the repository from github given the url and save it in the tmp folder
-//it returns the name of the path, name and last commit hash and a possible error
+// DownloadGithubRepo clones the repository from GitHub given the url and save it in the tmp folder,
+// if the download successfully complete the name of the path, name and last commit hash will be returned
 func DownloadGithubRepo(userID int, branch, url string) (string, string, string, error) {
 	url = strings.TrimSpace(url)
 
@@ -123,7 +124,7 @@ func DownloadGithubRepo(userID int, branch, url string) (string, string, string,
 	return fmt.Sprintf("./tmp/%d-%s-%s", userID, repoName, branch), repoName, commitHash.Hash.String(), nil
 }
 
-//given a github repository url it will return the name of the repo and the owner
+// GetUserAndNameFromRepoUrl get the username of the creator and the repository's name given a GitHub repository url
 func GetUserAndNameFromRepoUrl(url string) (string, string, error) {
 	url = strings.TrimSpace(url)
 	fmt.Println("getting user and name from url:", url)
@@ -141,10 +142,10 @@ func GetUserAndNameFromRepoUrl(url string) (string, string, error) {
 	return split[len(split)-2], split[len(split)-1], nil
 }
 
-//TODO: should read just the last one not all the commits in the json
-//given the github information of a repo it will tell if the commit has changed in the remote repo
+// HasLastCommitChanged will check if the last commit of a GitHub url is different from the given to the function
+// TODO: should read just the last one not all the commits in the json
 func HasLastCommitChanged(commit, url, branch string) (bool, error) {
-	//get request to the github api
+	//get request to the GitHub api
 	owner, name, err := GetUserAndNameFromRepoUrl(url)
 	if err != nil {
 		return false, err
@@ -161,7 +162,7 @@ func HasLastCommitChanged(commit, url, branch string) (bool, error) {
 	}
 
 	//read the response
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return false, err
 	}
@@ -175,7 +176,7 @@ func HasLastCommitChanged(commit, url, branch string) (bool, error) {
 		if err != nil {
 			return false, err
 		}
-		return false, fmt.Errorf("application: %s/%s returned a status code: %d, message: %s", owner, name, resp.StatusCode, Error.Message)
+		return false, fmt.Errorf("application: %s/%s returned %d as status code, message: %s", owner, name, resp.StatusCode, Error.Message)
 	}
 
 	var RepoCommits []GithubCommit
@@ -184,7 +185,7 @@ func HasLastCommitChanged(commit, url, branch string) (bool, error) {
 		return false, err
 	}
 
-	//check if repo dosen't have commits
+	//check if repo doesn't have commits
 	if len(RepoCommits) == 0 {
 		return false, errors.New("no commit found")
 	}
@@ -198,13 +199,13 @@ func HasLastCommitChanged(commit, url, branch string) (bool, error) {
 // 	return &Util{ctx: ctx}, nil
 // }
 
-//returns a connection to the ipaas database
+// ConnectToDB returns a connection to the ipaas database
 func ConnectToDB() (*mongo.Database, error) {
 	//get context
 	ctx, cancel := context.WithTimeout(context.TODO(), 10*time.Second)
 	defer cancel()
 	//try to connect
-	clientOptions := options.Client().ApplyURI(MONGO_URI)
+	clientOptions := options.Client().ApplyURI(MongoUri)
 	client, err := mongo.Connect(ctx, clientOptions)
 	if err != nil {
 		return nil, err
@@ -213,7 +214,7 @@ func ConnectToDB() (*mongo.Database, error) {
 	return client.Database("ipaas"), nil
 }
 
-//function to generate a random alphanumerical string without spaces and with a given length
+// GenerateRandomString will generate a random alphanumerical string of the given length
 func GenerateRandomString(size int) string {
 	rand.Seed(time.Now().UnixNano())
 	var password strings.Builder
