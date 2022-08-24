@@ -17,9 +17,9 @@ type Application struct {
 	Type           string             `bson:"type" json:"type,omitempty"`
 	Name           string             `bson:"name" json:"name,omitempty"`
 	Description    string             `bson:"description" json:"description,omitempty"`
-	GithubRepo     string             `bson:"githubRepo,omitemtpy" json:"githubRepo,omitempty"`
-	GithubBranch   string             `bson:"githubBranch,omitemtpy" json:"githubBranch,omitempty"`
-	LastCommitHash string             `bson:"lastCommitHash,omitemtpy" json:"lastCommitHash,omitempty"`
+	GithubRepo     string             `bson:"githubRepo,omitempty" json:"githubRepo,omitempty"`
+	GithubBranch   string             `bson:"githubBranch,omitempty" json:"githubBranch,omitempty"`
+	LastCommitHash string             `bson:"lastCommitHash,omitempty" json:"lastCommitHash,omitempty"`
 	Port           string             `bson:"port" json:"port,omitempty"`
 	ExternalPort   string             `bson:"externalPort" json:"externalPort,omitempty"`
 	Lang           string             `bson:"lang" json:"lang,omitempty"`
@@ -36,7 +36,7 @@ type Env struct {
 	Value string `bson:"value" json:"value"`
 }
 
-//create a container from an image which is the one created from a student's repository
+// CreateNewApplicationFromRepo creates a container from an image which is the one created from a student's repository
 func (c ContainerController) CreateNewApplicationFromRepo(creatorID int, port, name, language, imageName string) (string, error) {
 	//generic configs for the container
 	containerConfig := &container.Config{
