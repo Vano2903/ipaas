@@ -2,13 +2,16 @@ package main
 
 import (
 	"context"
+	"fmt"
+	"github.com/docker/docker/api/types"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
 
 func TestCreateImage(t *testing.T) {
-	assert := assert.New(t)
+	assertions := assert.New(t)
 
 	controller, err := NewContainerController(context.Background())
 	if err != nil {
@@ -16,33 +19,52 @@ func TestCreateImage(t *testing.T) {
 	}
 
 	urls := []struct {
-		Url         string
-		Branch      string
-		Envs        []Env
-		ShouldError bool
+		Url                 string
+		Branch              string
+		Envs                []Env
+		ShouldErrorInBuild  bool
+		ShouldErrAtDownload bool
 	}{
-		{"https://github.com/vano2903/testing", "master", []Env{}, false},
-		// {"github.com/vano2903/testing", "master", []Env{{Key: "TestKey", Value: "testValue"}}, false},
-		{"github.com/vano2903/testing", "non-working-version", []Env{}, true},
-		// {"github.com/vano2903/testing", "runtime-error", []Env{}, false},
-		// {"github.com/vano2903/testing", "inexisting-branch", []Env{}, true},
+		{"https://github.com/vano2903/testing", "master", []Env{}, false, false},
+		{"github.com/vano2903/testing", "master", []Env{{Key: "TestKey", Value: "testValue"}}, false, false},
+		{"github.com/vano2903/testing", "non-working-version", []Env{}, true, false},
+		{"github.com/vano2903/testing", "runtime-error", []Env{}, false, false},
+		{"github.com/vano2903/testing", "inexisting-branch", []Env{}, true, true},
 	}
 	userID := 10000
 	port := 8080 //webserver port
 
+	var images []string
+	var paths []string
 	for _, url := range urls {
 		userID++
-		path, name, _, _ := DownloadGithubRepo(userID, url.Branch, url.Url)
-		_, _, err = controller.CreateImage(userID, port, name, path, "go", url.Envs)
-		if url.ShouldError {
-			assert.Error(err)
+		path, name, _, err := DownloadGithubRepo(userID, url.Branch, url.Url)
+		if url.ShouldErrAtDownload {
+			assertions.Error(err)
+			continue
 		} else {
-			assert.NoError(err)
+			assertions.NoError(err)
 		}
+		_, imageID, err := controller.CreateImage(userID, port, name, path, "go", url.Envs)
+		if url.ShouldErrorInBuild {
+			assertions.Error(err)
+		} else {
+			assertions.NoError(err)
+			//check if the image is created
+			images = append(images, imageID)
+			fmt.Println(imageID)
+		}
+		paths = append(paths, path)
 	}
 
 	t.Cleanup(func() {
 		//delete created images
-		//delete downloaded folders
+		for _, image := range images {
+			controller.cli.ImageRemove(context.Background(), image, types.ImageRemoveOptions{})
+		}
+		//delete all files from the tmp folder
+		for _, path := range paths {
+			os.RemoveAll(path)
+		}
 	})
 }
