@@ -3,25 +3,30 @@ package main
 import (
 	"context"
 	"os"
+	"strconv"
+	"sync"
 
 	"github.com/joho/godotenv"
 	log "github.com/sirupsen/logrus"
 	"github.com/streadway/amqp"
+	"github.com/vano2903/ipaas/pkg/jwt"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/readpref"
 )
 
 const (
-	//service         = "applications-service"
-	listeningQueue = "send-applications"
-	//respondingQueue = "receive-applications"
+	service        = "applications-service"
+	listeningQueue = service + "-listening"
+	//respondingQueue = service + "-responses"
 )
 
 var (
-	MongoUri string
-	AmpqUrl  string
-	Langs    []LangsStruct
+	MongoUri      string
+	AmpqUrl       string
+	Langs         []LangsStruct
+	MaxGoroutines = 2
+	parser        *jwt.Parser
 )
 
 type LangsStruct struct {
@@ -91,12 +96,32 @@ func init() {
 		}
 	}(conn.Client(), context.Background())
 
+	//if err := SetLangs(conn); err != nil {
+	//	log.WithFields(log.Fields{
+	//		"error": err,
+	//	}).Fatal("Error setting languages")
+	//}
+
 	if err := LoadAvailableLangs(conn); err != nil {
 		log.WithFields(log.Fields{
 			"error": err,
 		}).Fatal("Error loading available languages")
 	}
 	log.Debug("Available languages loaded")
+
+	if os.Getenv("MAX_GOROUTINES") != "" {
+		MaxGoroutines, err = strconv.Atoi(os.Getenv("MAX_GOROUTINES"))
+		if err != nil {
+			log.WithFields(log.Fields{
+				"error": err,
+			}).Fatal("Error converting MAX_GOROUTINES to int")
+		}
+		if MaxGoroutines <= 0 {
+			log.Fatal("MAX_GOROUTINES must be greater than 0")
+		}
+	}
+
+	parser = jwt.NewParser([]byte(os.Getenv("JWT_SECRET")))
 
 	log.Info("Starting application service")
 }
@@ -152,49 +177,56 @@ func main() {
 		false,          // no-wait
 		nil,            // arguments
 	)
-
 	if err != nil {
 		log.WithFields(log.Fields{
 			"error": err,
 		}).Fatal("failed to declare a queue")
 	}
 
+	var forever chan bool
+
 	msgs, err := ch.Consume(
 		q.Name, // queue
 		"",     // consumer
-		true,   // auto-ack
+		false,  // auto-ack
 		false,  // exclusive
 		false,  // no-local
 		false,  // no-wait
 		nil,    // args
 	)
-
 	if err != nil {
 		log.WithFields(log.Fields{
 			"error": err,
 		}).Fatal("failed to consume messages")
 	}
 
-	var forever chan bool
-
-	log.Debug("listening for messages...")
+	var wg sync.WaitGroup
+	var routinesLimit int
 	go func() {
+		log.Debug("listening for messages...")
 		for d := range msgs {
-			log.Printf("Received a message: %s", d.Body)
+			wg.Add(1)
+			routinesLimit++
+			go MessageHandler(d, &wg)
+			if routinesLimit >= MaxGoroutines {
+				wg.Wait()
+				routinesLimit = 0
+			}
 		}
 	}()
 
 	log.Debug(" [*] Waiting for messages. To exit press CTRL+C")
 	<-forever
+	//TODO: should implement a graceful shutdown
 }
 
-// func SetLangs(conn *mongo.Database) error {
-// 	//declaring struct for languages
-// 	lang := LangsStruct{
-// 		Lang:       "go",
-// 		Dockerfile: "golang:1.18.1-alpine3.15.dockerfile",
-// 		CanBeUsed:  true,
-// 	}
-// 	_, err := conn.Collection("langs").InsertOne(context.TODO(), lang)
-// 	return err
-// }
+//func SetLangs(conn *mongo.Database) error {
+//	//declaring struct for languages
+//	lang := LangsStruct{
+//		Lang:       "go",
+//		Dockerfile: "golang:1.18.1-alpine3.15.dockerfile",
+//		CanBeUsed:  true,
+//	}
+//	_, err := conn.Collection("langs").InsertOne(context.TODO(), lang)
+//	return err
+//}
