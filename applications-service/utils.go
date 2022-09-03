@@ -82,13 +82,17 @@ func DownloadGithubRepo(userID int, branch, url string) (string, string, string,
 	fmt.Print("getting repo name...")
 	_, repoName, err := GetUserAndNameFromRepoUrl(url)
 	if err != nil {
+		fmt.Println("err")
 		return "", "", "", err
 	}
-	fmt.Println("ok, repo name:", repoName)
+	fmt.Println("ok")
+	fmt.Println("repo name:", repoName)
 
 	//get the repo name
-	fmt.Printf("downloading repo in ./tmp/%d-%s-%s...", userID, repoName, branch)
-	r, err := git.PlainClone(fmt.Sprintf("./tmp/%d-%s-%s", userID, repoName, branch), false, &git.CloneOptions{
+	tmpPath := fmt.Sprintf("./tmp/%d-%s-%s", userID, repoName, branch)
+	os.Mkdir(tmpPath, os.ModePerm)
+	fmt.Printf("downloading repo in %s...", tmpPath)
+	r, err := git.PlainClone(fmt.Sprintf("%s", tmpPath), false, &git.CloneOptions{
 		URL:           url,
 		Depth:         1,
 		SingleBranch:  true,
@@ -96,6 +100,7 @@ func DownloadGithubRepo(userID int, branch, url string) (string, string, string,
 		// Progress: os.Stdout,
 	})
 	if err != nil {
+		fmt.Println("err")
 		return "", "", "", err
 	}
 	fmt.Println("ok")
@@ -110,24 +115,25 @@ func DownloadGithubRepo(userID int, branch, url string) (string, string, string,
 	fmt.Print("getting last commit hash...")
 	commitHash, err := logs.Next()
 	if err != nil {
+		fmt.Println("err")
 		return "", "", "", err
 	}
 	fmt.Println("ok")
 
 	//remove the .git folder
 	fmt.Print("removing .git...")
-	if err := os.RemoveAll(fmt.Sprintf("./tmp/%d-%s-%s/.git", userID, repoName, branch)); err != nil {
+	if err := os.RemoveAll(fmt.Sprintf("%s/.git", tmpPath)); err != nil {
+		fmt.Println("err")
 		return "", "", "", err
 	}
-
 	fmt.Println("ok")
-	return fmt.Sprintf("./tmp/%d-%s-%s", userID, repoName, branch), repoName, commitHash.Hash.String(), nil
+	return fmt.Sprintf("%s", tmpPath), repoName, commitHash.Hash.String(), nil
 }
 
 // GetUserAndNameFromRepoUrl get the username of the creator and the repository's name given a GitHub repository url
 func GetUserAndNameFromRepoUrl(url string) (string, string, error) {
 	url = strings.TrimSpace(url)
-	fmt.Println("getting user and name from url:", url)
+	//fmt.Println("getting user and name from url:", url)
 	valid, err := ValidGithubUrl(url)
 	if err != nil {
 		return "", "", err
