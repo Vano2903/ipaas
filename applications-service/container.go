@@ -17,6 +17,7 @@ import (
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/archive"
 	"github.com/docker/go-connections/nat"
+	log "github.com/sirupsen/logrus"
 )
 
 type ContainerController struct {
@@ -134,47 +135,33 @@ func (c ContainerController) CreateImage(creatorID, port int, name, path, langua
 	if err != nil {
 		return "", "", err
 	}
-	if err != nil {
-		return "", "", err
-	}
 	fmt.Println("body:", string(a))
-
-	imageCompiledCorrectly, err := c.CheckIfImageCompiled(imageName[0], string(a))
-	if err != nil {
-		return "", "", err
-	}
-
-	if !imageCompiledCorrectly {
-		return "", "", fmt.Errorf("image %s compiled incorrectly", imageName[0])
-	}
 
 	//find the id of the image just created
 	var out bytes.Buffer
-
-	//check if image generated errors
-	// values := strings.Split(string(a), "\n")
-	// for _, v := range values {}
-
 	cmd := exec.CommandContext(c.ctx, "docker", "images", "-q", imageName[0])
 	cmd.Stdout = &out
-	err = cmd.Run()
-	if err != nil {
+	if err := cmd.Run(); err != nil {
 		return "", "", err
 	}
+	imageID := strings.Replace(out.String(), "\n", "", -1)
 
-	return imageName[0], strings.Replace(out.String(), "\n", "", -1), nil
+	if !c.CheckIfImageCompiled(string(a)) {
+		return "", imageID, fmt.Errorf("image %s compiled incorrectly", imageName[0])
+	}
+
+	return imageName[0], imageID, nil
 }
 
-func (c ContainerController) CheckIfImageCompiled(imageName string, imageBuildOutput string) (bool, error) {
-	fmt.Println("image build output:", imageBuildOutput)
+// CheckIfImageCompiled will check the output of the image build to see if the image was compiled correctly
+func (c ContainerController) CheckIfImageCompiled(imageBuildOutput string) bool {
 	lines := strings.Split(imageBuildOutput, "\n")
-	fmt.Println("len lines:", len(lines))
-	fmt.Println("lines:", lines[len(lines)-2])
-	fmt.Println("lines:", lines[len(lines)-1])
-	return true, nil
+	log.Debugln("len lines:", len(lines))
+	log.Debugln("lines:", lines[len(lines)-2])
+	return strings.Contains(lines[len(lines)-2], "Successfully tagged")
 }
 
-//remove an image from the image id
+// RemoveImage removes an image from the image id
 func (c ContainerController) RemoveImage(imageID string) error {
 	//remove the image
 	_, err := c.cli.ImageRemove(c.ctx, imageID, types.ImageRemoveOptions{
@@ -183,7 +170,7 @@ func (c ContainerController) RemoveImage(imageID string) error {
 	return err
 }
 
-// GetContainerExternalPort gets the first port opened by the container on the host machine,
+// GetContainerExternalPort gets the first port opened by the container on the host machine
 func (c ContainerController) GetContainerExternalPort(id, containerPort string) (string, error) {
 	//same as docker inspect <id>
 	container, err := c.cli.ContainerInspect(c.ctx, id)
