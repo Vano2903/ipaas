@@ -1,4 +1,9 @@
 go 1.18
 
-use ./applications-service
-use pkg/jwt
+use (
+	./applications-service
+	./internal/jwt
+	./internal/utils
+	./internal/messanger
+)
+
