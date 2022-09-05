@@ -20,6 +20,38 @@ func NewMessanger(ampqUri string, listeningQueueUri string, respondingQueueUri s
 	}
 }
 
+func (m *Messanger) declareListeningQueue() error {
+	q, err := m.channel.QueueDeclare(
+		m.ListeningQueueUri, // name
+		false,               // durable
+		false,               // delete when unused
+		false,               // exclusive
+		false,               // no-wait
+		nil,                 // arguments
+	)
+	if err != nil {
+		return err
+	}
+	m.ListeningQueue = &q
+	return nil
+}
+
+func (m *Messanger) declareRespondingQueue() error {
+	q, err := m.channel.QueueDeclare(
+		m.RespondingQueueUri, // name
+		false,                // durable
+		false,                // delete when unused
+		false,                // exclusive
+		false,                // no-wait
+		nil,                  // arguments
+	)
+	if err != nil {
+		return err
+	}
+	m.RespondingQueue = &q
+	return nil
+}
+
 func (m *Messanger) Connect() error {
 	var err error
 	m.conn, err = amqp.Dial(m.AmpqUri)
@@ -28,6 +60,14 @@ func (m *Messanger) Connect() error {
 	}
 	m.channel, err = m.conn.Channel()
 	if err != nil {
+		return err
+	}
+	//return nil
+
+	if err := m.declareListeningQueue(); err != nil {
+		return err
+	}
+	if err := m.declareRespondingQueue(); err != nil {
 		return err
 	}
 	return nil
@@ -45,47 +85,15 @@ func (m *Messanger) Close() error {
 	return nil
 }
 
-func (m *Messanger) DeclareListeningQueue() error {
-	q, err := m.channel.QueueDeclare(
-		m.ListeningQueueUri, // name
-		false,               // durable
-		false,               // delete when unused
-		false,               // exclusive
-		false,               // no-wait
-		nil,                 // arguments
-	)
-	if err != nil {
-		return err
-	}
-	m.ListeningQueue = &q
-	return nil
-}
-
-func (m *Messanger) DeclareRespondingQueue() error {
-	q, err := m.channel.QueueDeclare(
-		m.RespondingQueueUri, // name
-		false,                // durable
-		false,                // delete when unused
-		false,                // exclusive
-		false,                // no-wait
-		nil,                  // arguments
-	)
-	if err != nil {
-		return err
-	}
-	m.RespondingQueue = &q
-	return nil
-}
-
 func (m *Messanger) Listen() (<-chan amqp.Delivery, error) {
 	msgs, err := m.channel.Consume(
-		m.ListeningQueue.Name, // queue
-		"",                    // consumer
-		true,                  // auto-ack
-		false,                 // exclusive
-		false,                 // no-local
-		false,                 // no-wait
-		nil,                   // args
+		m.ListeningQueueUri, // queue
+		"",                  // consumer
+		true,                // auto-ack
+		false,               // exclusive
+		false,               // no-local
+		false,               // no-wait
+		nil,                 // args
 	)
 	if err != nil {
 		return nil, err
