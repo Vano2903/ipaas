@@ -1,4 +1,4 @@
-module github.com/vano2903/ipaas/pkg/jwt
+module github.com/vano2903/ipaas/internal/jwt
 
 go 1.19
 
