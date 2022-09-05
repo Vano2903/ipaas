@@ -1,4 +1,4 @@
-package main
+package utils
 
 import (
 	"context"
@@ -14,22 +14,21 @@ func TestValidGithubUrl(t *testing.T) {
 	assertions := assert.New(t)
 	urls := []struct {
 		Url         string
-		Valid       bool
 		ShouldError bool
 	}{
-		{"    github.com/vano2903/testing", true, false},
-		{"github.com/vano2903/testing.git     ", true, false},
-		{"www.github.com/vano2903/testing", true, false},
-		{"www.github.com/vano2903/testing.git    ", true, false},
-		{"https://github.com/vano2903/testing", true, false},
-		{"     https://github.com/vano2903/testing.git", true, false},
-		{"gitlab.com/vano2903/testing", false, true},
-		{"github.com/vano2903/this-repo-doesnt-exist", false, true},
-		{"github/vano2903/this-url-is-not-valid", false, true},
+		{"    github.com/vano2903/testing", false},
+		{"github.com/vano2903/testing.git     ", false},
+		{"www.github.com/vano2903/testing", false},
+		{"www.github.com/vano2903/testing.git    ", false},
+		{"https://github.com/vano2903/testing", false},
+		{"     https://github.com/vano2903/testing.git", false},
+		{"gitlab.com/vano2903/testing", true},
+		{"github.com/vano2903/this-repo-doesnt-exist", true},
+		{"github/vano2903/this-url-is-not-valid", true},
 	}
 
 	for _, url := range urls {
-		valid, err := ValidGithubUrl(url.Url)
+		err := ValidGithubUrl(url.Url)
 		if !url.ShouldError {
 			if err != nil {
 				t.Errorf("error validating %s: %v", url.Url, err)
@@ -37,7 +36,6 @@ func TestValidGithubUrl(t *testing.T) {
 		} else {
 			assertions.Error(err)
 		}
-		assertions.Equal(valid, url.Valid)
 	}
 }
 
@@ -113,8 +111,10 @@ func TestGetUserAndNameFromRepoUrl(t *testing.T) {
 }
 
 func TestConnectToDB(t *testing.T) {
+	testUri := ""
+	u := NewUtil(context.Background(), testUri)
 	assertions := assert.New(t)
-	connection, err := ConnectToDB()
+	connection, err := u.ConnectToDB()
 	assertions.NoError(err)
 
 	defer func(client *mongo.Client, ctx context.Context) {

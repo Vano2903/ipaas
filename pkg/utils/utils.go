@@ -1,4 +1,4 @@
-package main
+package utils
 
 import (
 	"context"
@@ -41,7 +41,7 @@ type GithubCommitInternal struct {
 
 // ValidGithubUrl check if an url is a valid and existing GitHub repo url
 // !should allow other git remotes (I.E. gitlab)
-func ValidGithubUrl(url string) (bool, error) {
+func ValidGithubUrl(url string) error {
 
 	//trim the url
 	url = strings.TrimSpace(url)
@@ -54,19 +54,19 @@ func ValidGithubUrl(url string) (bool, error) {
 		!strings.HasPrefix(url, "http://github.") &&
 		!strings.HasPrefix(url, "https://www.github.") &&
 		!strings.HasPrefix(url, "http://www.github.") {
-		return false, errors.New("url is not a github url")
+		return errors.New("url is not a github url")
 	}
 
 	resp, err := http.Get(url)
 	if err != nil {
-		return false, err
+		return err
 	}
 
 	if resp.StatusCode != 200 {
-		return false, errors.New("invalid url, check if the url is correct or if the repo is not private")
+		return errors.New("invalid url, check if the url is correct or if the repo is not private")
 	}
 
-	return true, nil
+	return nil
 }
 
 // DownloadGithubRepo clones the repository from GitHub given the url and save it in the tmp folder,
@@ -134,12 +134,9 @@ func DownloadGithubRepo(userID int, branch, url string) (string, string, string,
 func GetUserAndNameFromRepoUrl(url string) (string, string, error) {
 	url = strings.TrimSpace(url)
 	//fmt.Println("getting user and name from url:", url)
-	valid, err := ValidGithubUrl(url)
+	err := ValidGithubUrl(url)
 	if err != nil {
 		return "", "", err
-	}
-	if !valid {
-		return "", "", errors.New("invalid url")
 	}
 
 	url = strings.TrimSuffix(url, ".git")
@@ -199,27 +196,6 @@ func HasLastCommitChanged(commit, url, branch string) (bool, error) {
 	return RepoCommits[0].SHA != commit, nil
 }
 
-// //generate a new pointer to the util struct
-// //is like a constructor
-// func NewUtil(ctx context.Context) (*Util, error) {
-// 	return &Util{ctx: ctx}, nil
-// }
-
-// ConnectToDB returns a connection to the ipaas database
-func ConnectToDB() (*mongo.Database, error) {
-	//get context
-	ctx, cancel := context.WithTimeout(context.TODO(), 10*time.Second)
-	defer cancel()
-	//try to connect
-	clientOptions := options.Client().ApplyURI(MongoUri)
-	client, err := mongo.Connect(ctx, clientOptions)
-	if err != nil {
-		return nil, err
-	}
-
-	return client.Database("ipaas"), nil
-}
-
 // GenerateRandomString will generate a random alphanumerical string of the given length
 func GenerateRandomString(size int) string {
 	rand.Seed(time.Now().UnixNano())
@@ -233,4 +209,32 @@ func GenerateRandomString(size int) string {
 		inRune[i], inRune[j] = inRune[j], inRune[i]
 	})
 	return string(inRune)
+}
+
+func GetLastCommitHash(url, branch string) {
+
+}
+
+type Util struct {
+	ctx                   context.Context
+	databaseConnectionUri string
+}
+
+func NewUtil(ctx context.Context, databaseConnectionUri string) *Util {
+	return &Util{ctx: ctx, databaseConnectionUri: databaseConnectionUri}
+}
+
+// ConnectToDB returns a connection to the ipaas database
+func (u Util) ConnectToDB() (*mongo.Database, error) {
+	//get context
+	ctx, cancel := context.WithTimeout(u.ctx, 10*time.Second)
+	defer cancel()
+	//try to connect
+	clientOptions := options.Client().ApplyURI(u.databaseConnectionUri)
+	client, err := mongo.Connect(ctx, clientOptions)
+	if err != nil {
+		return nil, err
+	}
+
+	return client.Database("ipaas"), nil
 }
