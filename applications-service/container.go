@@ -8,16 +8,18 @@ import (
 	"io/ioutil"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/docker/docker/api/types"
+	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	volumeType "github.com/docker/docker/api/types/volume"
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/archive"
 	"github.com/docker/go-connections/nat"
-	log "github.com/sirupsen/logrus"
+	"github.com/vano2903/ipaas/internal/utils"
 )
 
 type ContainerController struct {
@@ -43,7 +45,7 @@ func NewContainerController(ctx context.Context) (*ContainerController, error) {
 // CreateImage will create an image given the creator id, port to expose (in the docker),
 // name of the app, path for the tmp file, lang for the dockerfile and envs, if no error occurs
 // the function will return the image name and image id
-func (c ContainerController) CreateImage(creatorID, port int, name, path, language string, envs []Env) (string, string, error) {
+func (c ContainerController) CreateImage(creatorID, port int, name, branch, path, language string, envs []Env) (string, string, error) {
 	//check if the language is supported
 	var found bool
 	var lang LangsStruct
@@ -79,7 +81,7 @@ func (c ContainerController) CreateImage(creatorID, port int, name, path, langua
 	//create the dockerfile
 	dockerfileWithEnvs := fmt.Sprintf(string(dockerfile), name, path, envString, port)
 	//set a random name for the dockerfile
-	dockerName := "ipaas-dockerfile_" + GenerateRandomString(10)
+	dockerName := "ipaas-dockerfile_" + utils.GenerateRandomString(10)
 
 	//create and write the propretary dockerfile to the repo
 	f, err := os.Create(path + "/" + dockerName)
@@ -107,7 +109,7 @@ func (c ContainerController) CreateImage(creatorID, port int, name, path, langua
 	fmt.Println("build the context:", &buildContext)
 
 	//create the name for the image <creatorID>-<name>-<language>
-	imageName := []string{fmt.Sprintf("%d-%s-%s", creatorID, name, language)}
+	imageName := []string{fmt.Sprintf("%d-%s-%s-%s", creatorID, name, branch, language)}
 	fmt.Println("image name:", imageName[0])
 
 	//create the image from the dockerfile
@@ -156,8 +158,8 @@ func (c ContainerController) CreateImage(creatorID, port int, name, path, langua
 // CheckIfImageCompiled will check the output of the image build to see if the image was compiled correctly
 func (c ContainerController) CheckIfImageCompiled(imageBuildOutput string) bool {
 	lines := strings.Split(imageBuildOutput, "\n")
-	log.Debugln("len lines:", len(lines))
-	log.Debugln("lines:", lines[len(lines)-2])
+	logger.Debugln("len lines:", len(lines))
+	logger.Debugln("lines:", lines[len(lines)-2])
 	return strings.Contains(lines[len(lines)-2], "Successfully tagged")
 }
 
@@ -285,4 +287,56 @@ func (c ContainerController) GetContainerStatus(id string) (string, error) {
 		return "", err
 	}
 	return container.State.Status, nil
+}
+
+// CreateNewContainerFromImage creates a container from an image which is the one created from a student's repository,
+// it returns the container id
+func (c ContainerController) CreateNewContainerFromImage(creatorID, port int, name, branch, language, imageName string) (string, error) {
+	//generic configs for the container
+	containerConfig := &container.Config{
+		Image: imageName,
+	}
+
+	// externalPort, err := getFreePort()
+	// if err != nil {
+	// 	return "", err
+	// }
+
+	//host bindings config, hostPort is not set cause the engine will assign a dinamyc one
+	hostBinding := nat.PortBinding{
+		HostIP: "0.0.0.0",
+		//HostPort is the port that the host will listen to, since it's not set
+		//the docker engine will assign a random open port
+		// HostPort: strconv.Itoa(externalPort),
+	}
+
+	//set the port for the container (internal one)
+	containerPort, err := nat.NewPort("tcp", strconv.Itoa(port))
+	if err != nil {
+		return "", err
+	}
+
+	//set a slice of possible port bindings
+	//since it's a db container we need just one
+	portBinding := nat.PortMap{containerPort: []nat.PortBinding{hostBinding}}
+
+	//set the configuration of the host
+	//set the port bindings and the restart policy
+	//!choose a restart policy
+	hostConfig := &container.HostConfig{
+		PortBindings: portBinding,
+		RestartPolicy: container.RestartPolicy{
+			Name:              "on-failure",
+			MaximumRetryCount: 1,
+		},
+	}
+
+	//create the container
+	containerBody, err := c.cli.ContainerCreate(c.ctx, containerConfig,
+		hostConfig, nil, nil, fmt.Sprintf("%d-%s-%s-%s", creatorID, name, branch, language))
+	if err != nil {
+		return "", err
+	}
+
+	return containerBody.ID, nil
 }
