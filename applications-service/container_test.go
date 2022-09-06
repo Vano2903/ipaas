@@ -3,11 +3,12 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/docker/docker/api/types"
 	"os"
 	"testing"
 
+	"github.com/docker/docker/api/types"
 	"github.com/stretchr/testify/assert"
+	"github.com/vano2903/ipaas/internal/utils"
 )
 
 func TestCreateImage(t *testing.T) {
@@ -38,14 +39,14 @@ func TestCreateImage(t *testing.T) {
 	var paths []string
 	for _, url := range urls {
 		userID++
-		path, name, _, err := DownloadGithubRepo(userID, url.Branch, url.Url)
+		path, name, _, err := utils.DownloadGithubRepo(userID, url.Branch, url.Url)
 		if url.ShouldErrAtDownload {
 			assertions.Error(err)
 			continue
 		} else {
 			assertions.NoError(err)
 		}
-		_, imageID, err := controller.CreateImage(userID, port, name, path, "go", url.Envs)
+		_, imageID, err := controller.CreateImage(userID, port, name, url.Branch, path, "go", url.Envs)
 		if url.ShouldErrorInBuild {
 			assertions.Error(err)
 		} else {
