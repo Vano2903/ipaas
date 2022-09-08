@@ -158,8 +158,8 @@ func (c ContainerController) CreateImage(creatorID, port int, name, branch, path
 // CheckIfImageCompiled will check the output of the image build to see if the image was compiled correctly
 func (c ContainerController) CheckIfImageCompiled(imageBuildOutput string) bool {
 	lines := strings.Split(imageBuildOutput, "\n")
-	logger.Debugln("len lines:", len(lines))
-	logger.Debugln("lines:", lines[len(lines)-2])
+	l.Debugln("len lines:", len(lines))
+	l.Debugln("lines:", lines[len(lines)-2])
 	return strings.Contains(lines[len(lines)-2], "Successfully tagged")
 }
 

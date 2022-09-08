@@ -31,7 +31,7 @@ var (
 	parser        *jwt.Parser
 	u             *utils.Util
 	mess          *messanger.Messanger
-	logger        *log.Entry
+	l             *log.Entry
 	Actions       = make(map[string]Action)
 )
 
@@ -79,14 +79,14 @@ func init() {
 		log.SetLevel(log.InfoLevel)
 	}
 
-	logger = log.WithFields(log.Fields{
+	l = log.WithFields(log.Fields{
 		"service": service,
 	})
 
 	//checking if all envs are set
 	MongoUri = os.Getenv("MONGO_URI")
 	if MongoUri == "" {
-		logger.Fatal("MONGO_URI is not set in .env file")
+		l.Fatal("MONGO_URI is not set in .env file")
 	}
 	u = utils.NewUtil(context.TODO(), MongoUri)
 
@@ -98,19 +98,19 @@ func init() {
 	//checking connection to database
 	conn, err := u.ConnectToDB()
 	if err != nil {
-		logger.WithFields(log.Fields{
+		l.WithFields(log.Fields{
 			"error": err,
 		}).Fatal("Error connecting to database")
 	}
 	if err := conn.Client().Ping(context.Background(), readpref.Primary()); err != nil {
-		logger.WithFields(log.Fields{
+		l.WithFields(log.Fields{
 			"error": err,
 		}).Fatal("Error pinging the database")
 	}
 	defer func(client *mongo.Client, ctx context.Context) {
 		err := client.Disconnect(ctx)
 		if err != nil {
-			logger.WithFields(log.Fields{
+			l.WithFields(log.Fields{
 				"error": err,
 			}).Fatal("Error disconnecting from database")
 		}
@@ -123,28 +123,28 @@ func init() {
 	//}
 
 	if err := LoadAvailableLangs(conn); err != nil {
-		logger.WithFields(log.Fields{
+		l.WithFields(log.Fields{
 			"error": err,
 		}).Fatal("Error loading available languages")
 	}
-	logger.Debug("Available languages loaded")
+	l.Debug("Available languages loaded")
 
 	if err := LoadActionsFromDatabase(conn); err != nil {
-		logger.WithFields(log.Fields{
+		l.WithFields(log.Fields{
 			"error": err,
 		}).Fatal("Error loading actions from database")
 	}
-	logger.Debugln("Actions loaded")
+	l.Debugln("Actions loaded")
 
 	if os.Getenv("MAX_GOROUTINES") != "" {
 		MaxGoroutines, err = strconv.Atoi(os.Getenv("MAX_GOROUTINES"))
 		if err != nil {
-			logger.WithFields(log.Fields{
+			l.WithFields(log.Fields{
 				"error": err,
 			}).Fatal("Error converting MAX_GOROUTINES to int")
 		}
 		if MaxGoroutines <= 0 {
-			logger.Fatal("MAX_GOROUTINES must be greater than 0")
+			l.Fatal("MAX_GOROUTINES must be greater than 0")
 		}
 	}
 
@@ -152,7 +152,7 @@ func init() {
 	cont, err = NewContainerController(context.Background())
 	mess = messanger.NewMessanger(AmpqUrl, listeningQueue, respondingQueue)
 
-	logger.Info("Starting application service")
+	l.Info("Starting application service")
 }
 
 func LoadAvailableLangs(conn *mongo.Database) error {
@@ -183,23 +183,23 @@ func LoadActionsFromDatabase(conn *mongo.Database) error {
 }
 
 func main() {
-	logger.Debug("Connecting to RabbitMQ")
+	l.Debug("Connecting to RabbitMQ")
 	if err := mess.Connect(); err != nil {
-		logger.WithFields(log.Fields{
+		l.WithFields(log.Fields{
 			"error": err,
 		}).Fatal("failed to connect to rabbitmq")
 	}
 
 	msgs, err := mess.Listen()
 	if err != nil {
-		logger.WithFields(log.Fields{
+		l.WithFields(log.Fields{
 			"error": err,
 		}).Fatal("failed to listen to rabbitmq")
 	}
 
 	defer func() {
 		if err := mess.Close(); err != nil {
-			logger.WithFields(log.Fields{
+			l.WithFields(log.Fields{
 				"error": err,
 			}).Fatal("failed to disconnect from rabbitmq")
 		}
@@ -209,7 +209,7 @@ func main() {
 	var routinesLimit int
 	forever := make(chan bool)
 	go func() {
-		logger.Debug("listening for messages...")
+		l.Debug("listening for messages...")
 		for d := range msgs {
 			wg.Add(1)
 			routinesLimit++
@@ -221,7 +221,7 @@ func main() {
 		}
 	}()
 
-	logger.Debug(" [*] Waiting for messages. To exit press CTRL+C")
+	l.Debug(" [*] Waiting for messages. To exit press CTRL+C")
 	<-forever
 	//TODO: should implement a graceful shutdown
 }

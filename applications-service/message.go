@@ -94,12 +94,12 @@ func (m Message) Validate() (Student, error) {
 
 func MessageHandler(msg amqp.Delivery, wg *sync.WaitGroup) {
 	defer wg.Done()
-	logger.Info("Received message")
+	l.Info("Received message")
 
 	var message Message
 	err := json.Unmarshal(msg.Body, &message)
 	if err != nil {
-		logger.WithFields(log.Fields{
+		l.WithFields(log.Fields{
 			"error": err,
 		}).Error("error validating message")
 		return
@@ -107,7 +107,7 @@ func MessageHandler(msg amqp.Delivery, wg *sync.WaitGroup) {
 
 	_, err = message.Validate()
 	if err != nil {
-		logger.WithFields(log.Fields{
+		l.WithFields(log.Fields{
 			"error": err,
 		}).Error("error validating message")
 		return
@@ -118,13 +118,13 @@ func MessageHandler(msg amqp.Delivery, wg *sync.WaitGroup) {
 		//create app
 		app, err := cont.CreateNewApplication(message.UserID, message.Body)
 		if err != nil {
-			logger.WithFields(log.Fields{
+			l.WithFields(log.Fields{
 				"error": err,
 			}).Error("error creating app")
 			//msg.Nack(false, false)
 			return
 		}
-		logger.WithFields(log.Fields{
+		l.WithFields(log.Fields{
 			"userID":      message.UserID,
 			"containerID": app.ID,
 		}).Info("app created")
@@ -134,7 +134,7 @@ func MessageHandler(msg amqp.Delivery, wg *sync.WaitGroup) {
 		//update app
 	}
 
-	logger.WithFields(log.Fields{
+	l.WithFields(log.Fields{
 		"message": message,
 	}).Info("Message handled")
 }

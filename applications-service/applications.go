@@ -95,17 +95,17 @@ func (c ContainerController) CreateNewApplication(studentID int, appDetails AppP
 	if err := utils.ValidGithubUrl(appDetails.GithubRepoUrl); err != nil {
 		return Application{}, err
 	}
-	logger.Debugln("Valid github url")
+	l.Debugln("Valid github url")
 
 	//download the repo
 	repo, name, hash, err := utils.DownloadGithubRepo(studentID, appDetails.GithubBranch, appDetails.GithubRepoUrl)
 	if err != nil {
 		return Application{}, err
 	}
-	logger.Debugln("Downloaded github repo")
-	logger.Debugln("repo:", repo)
-	logger.Debugln("name:", name)
-	logger.Debugln("hash:", hash)
+	l.Debugln("Downloaded github repo")
+	l.Debugln("repo:", repo)
+	l.Debugln("name:", name)
+	l.Debugln("hash:", hash)
 
 	//port to expose for the app
 	port, err := strconv.Atoi(appDetails.Port)
@@ -119,8 +119,8 @@ func (c ContainerController) CreateNewApplication(studentID int, appDetails AppP
 		return Application{}, fmt.Errorf("error creating the image: %v", err)
 	}
 
-	logger.Debugln("name:", imageName)
-	logger.Debugln("id:", imageID)
+	l.Debugln("name:", imageName)
+	l.Debugln("id:", imageID)
 
 	//remove the repo after creating the application
 	err = os.RemoveAll(repo)
@@ -148,7 +148,7 @@ func (c ContainerController) CreateNewApplication(studentID int, appDetails AppP
 	if err != nil {
 		return Application{}, fmt.Errorf("error getting the status of the container: %v", err)
 	}
-	logger.Debugln("status:", status)
+	l.Debugln("status:", status)
 
 	var externalPort string
 	if status == "running" {
