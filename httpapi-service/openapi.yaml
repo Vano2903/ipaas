@@ -1,0 +1,30 @@
+basePath: /api/v1/
+consumes:
+    - application/json
+info:
+    description: |-
+        IPaaS is a Platform as a Service that let users specify a GitHub repository
+        and the service will compile and run the code in a container and expose it.
+        It is also possible to create a database and link it to the container.
+    title: The API of IPaaS.
+    version: 1.0.0
+paths:
+    /app/new:
+        post:
+            description: This is a description (longer)
+            operationId: new-application
+            responses:
+                "200":
+                    $ref: '#/responses/SuccessResponseDynamic'
+                "400":
+                    $ref: '#/responses/ErrorResponseStatic'
+                "500":
+                    $ref: '#/responses/ErrorResponseStatic'
+            summary: This is a summary
+            tags:
+                - applications
+produces:
+    - application/json
+schemes:
+    - http
+swagger: "2.0"

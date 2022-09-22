@@ -2,6 +2,9 @@ go 1.18
 
 use (
 	./applications-service
+	./httpapi-service
+
+	./internal/responser
 	./internal/jwt
 	./internal/utils
 	./internal/messanger

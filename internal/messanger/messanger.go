@@ -101,7 +101,7 @@ func (m *Messanger) Listen() (<-chan amqp.Delivery, error) {
 	return msgs, nil
 }
 
-func (m *Messanger) Respond(msg string) error {
+func (m *Messanger) Send(msg string) error {
 	err := m.channel.Publish(
 		"",                     // exchange
 		m.RespondingQueue.Name, // routing key
