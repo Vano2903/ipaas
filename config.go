@@ -39,6 +39,10 @@ func init() {
 	}
 	defer conn.Client().Disconnect(context.TODO())
 
+	if err := initDatabase(conn); err != nil {
+		panic("error initializing the database: " + err.Error())
+	}
+
 	//generate private and public keys
 	privateKey, err = rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
