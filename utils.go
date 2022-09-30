@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/go-git/go-git/v5"
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
@@ -41,7 +42,7 @@ type GithubCommitInternal struct {
 	Message string `json:"message"`
 }
 
-//get the student from the database given a valid access token (will be retrived from cookies)
+// get the student from the database given a valid access token (will be retrived from cookies)
 func (u Util) GetUserFromCookie(r *http.Request, connection *mongo.Database) (Student, error) {
 	//search the access token in the cookies
 	var acc string
@@ -66,7 +67,7 @@ func (u Util) GetUserFromCookie(r *http.Request, connection *mongo.Database) (St
 	return s, nil
 }
 
-//check if a url is a valid github repo download url (github.com/name/example.git)
+// check if a url is a valid github repo download url (github.com/name/example.git)
 func (u Util) ValidGithubUrl(url string) bool {
 	if !strings.HasPrefix(url, "https://github.com/") {
 		return false
@@ -79,9 +80,9 @@ func (u Util) ValidGithubUrl(url string) bool {
 	return true
 }
 
-//TODO: branch is not used yet, should be implemented
-//this function clone the repository from github given the url and save it in the tmp folder
-//it returns the name of the path, name and last commit hash and a possible error
+// TODO: branch is not used yet, should be implemented
+// this function clone the repository from github given the url and save it in the tmp folder
+// it returns the name of the path, name and last commit hash and a possible error
 func (u Util) DownloadGithubRepo(userID int, branch, url string) (string, string, string, error) {
 	//get the name of the repo
 	fmt.Print("getting repo name...")
@@ -126,7 +127,7 @@ func (u Util) DownloadGithubRepo(userID int, branch, url string) (string, string
 	return fmt.Sprintf("./tmp/%d-%s", userID, repoName), repoName, commitHash.Hash.String(), nil
 }
 
-//given a github repository url it will return the name of the repo and the owner
+// given a github repository url it will return the name of the repo and the owner
 func (u Util) GetUserAndNameFromRepoUrl(url string) (string, string) {
 	url = url[19 : len(url)-4]
 	fmt.Println("new URL:", url)
@@ -134,8 +135,8 @@ func (u Util) GetUserAndNameFromRepoUrl(url string) (string, string) {
 	return split[0], split[1]
 }
 
-//TODO: should read just the last one not all the commits in the json
-//given the github information of a repo it will tell if the commit has changed in the remote repo
+// TODO: should read just the last one not all the commits in the json
+// given the github information of a repo it will tell if the commit has changed in the remote repo
 func (u Util) HasLastCommitChanged(commit, url, branch string) (bool, error) {
 	//get request to the github api
 	owner, name := u.GetUserAndNameFromRepoUrl(url)
@@ -181,13 +182,13 @@ func (u Util) HasLastCommitChanged(commit, url, branch string) (bool, error) {
 	return RepoCommits[0].SHA != commit, nil
 }
 
-//generate a new pointer to the util struct
-//is like a constructor
+// generate a new pointer to the util struct
+// is like a constructor
 func NewUtil(ctx context.Context) (*Util, error) {
 	return &Util{ctx: ctx}, nil
 }
 
-//returns a connection to the ipaas database
+// returns a connection to the ipaas database
 func connectToDB() (*mongo.Database, error) {
 	//get context
 	ctx, _ := context.WithTimeout(context.TODO(), 10*time.Second)
@@ -202,7 +203,58 @@ func connectToDB() (*mongo.Database, error) {
 	return client.Database("ipaas"), nil
 }
 
-//function to generate a random alphanumerical string without spaces and with a given length
+func initDatabase(db *mongo.Database) error {
+	var collections []string = []string{
+		"users",
+		"applications",
+		"langs",
+		"oauthStates",
+		"pollingIDs",
+		"refreshTokens",
+	}
+	existingCollections, err := db.ListCollectionNames(context.Background(), bson.D{{}})
+	if err != nil {
+		return err
+	}
+
+	//create collections
+	for _, collection := range collections {
+		//check if collection exists
+		fmt.Printf("checking if %s exists\n", collection)
+		inexistingCollection := true
+		for _, existingCollection := range existingCollections {
+			if collection == existingCollection {
+				inexistingCollection = false
+				break
+			}
+		}
+
+		if inexistingCollection {
+			fmt.Println(collection, "doesn't exists, creating..")
+
+			if err := db.CreateCollection(context.Background(), collection); err != nil {
+				return err
+			}
+		}
+	}
+
+	langs, err := db.Collection("langs").CountDocuments(context.Background(), bson.M{})
+	if err != nil {
+		return err
+	}
+	if langs == 0 {
+		//insert langs
+		if _, err := db.Collection("langs").InsertMany(context.Background(), []interface{}{
+			bson.M{"lang": "go"},
+		}); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// function to generate a random alphanumerical string without spaces and with a given length
 func generateRandomString(size int) string {
 	minNum := 4
 	minUpperCase := 4
@@ -235,7 +287,7 @@ func generateRandomString(size int) string {
 	return string(inRune)
 }
 
-//return a random open port on the host
+// return a random open port on the host
 func getFreePort() (int, error) {
 	//:0 is the kernel port to get a free port
 	//we are asking for a random open port
