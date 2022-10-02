@@ -10,7 +10,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"os"
 	"strings"
@@ -153,7 +153,7 @@ func CheckState(cypher string) (valid bool, redirectUri string, state string, er
 	}
 
 	//delete the state from the database and check if it's still valid
-	//(should delete it even if it's expired so we delete it before check if it's expired)
+	//(should delete it even if it's expired, so we delete it before check if it's expired)
 	_, err = stateCollection.DeleteOne(context.TODO(), bson.M{"state": state})
 	if err != nil {
 		return false, "", "", err
@@ -196,7 +196,7 @@ func UpdatePollingID(randomID, accessToken, refreshToken string) error {
 			return err
 		}
 	}
-	
+
 	update := bson.D{{"$set", bson.D{{"accessToken", accessToken}, {"refreshToken", refreshToken}, {"loginSuccessful", true}}}}
 	_, err = pollingCollection.UpdateOne(context.TODO(), bson.M{"id": randomID}, update)
 	return err
@@ -207,7 +207,7 @@ func UpdatePollingID(randomID, accessToken, refreshToken string) error {
 // https://paleoid.stoplight.io/docs/api/b3A6NDE0Njg2Mw-ottieni-un-access-token
 func GetPaleoIDAccessToken(code string) (string, error) {
 	//do post request to url with the code and the env variables
-	//(they are envs cause they are private and saved in the .env)
+	//(they are envs because they are private and saved in the .env)
 	url := "https://id.paleo.bg.it/oauth/token"
 	payload := Payload{
 		GrantType:    "authorization_code",
@@ -236,7 +236,7 @@ func GetPaleoIDAccessToken(code string) (string, error) {
 	}
 
 	defer res.Body.Close()
-	body, _ := ioutil.ReadAll(res.Body)
+	body, _ := io.ReadAll(res.Body)
 
 	//get the access token
 	//I decided to use strings replace because it's easier and doesn't require a struct to unmarshal
@@ -271,7 +271,7 @@ func GetStudentFromPaleoIDAccessToken(accessToken string) (Student, error) {
 	}
 
 	defer res.Body.Close()
-	body, err := ioutil.ReadAll(res.Body)
+	body, err := io.ReadAll(res.Body)
 	if err != nil {
 		return Student{}, err
 	}

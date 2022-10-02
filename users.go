@@ -12,7 +12,7 @@ import (
 
 type Student struct {
 	// MID      primitive.ObjectID `bson:"_id" json:"-"`
-	ID       int    `bson:"userID" json:"matricola"` //id of the student (teachers will use the same but it's 6 digit long instead of 5)
+	ID       int    `bson:"userID" json:"matricola"` //id of the student (teachers will use the same, but it's 6 digit long instead of 5)
 	Name     string `bson:"name" json:"nome"`        //name of the student
 	LastName string `bson:"lastName" json:"cognome"` //last name of the student
 	Email    string `bson:"email" json:"email"`      //email of the student
@@ -20,7 +20,7 @@ type Student struct {
 	// Applications []string `bson:"applications" json:"applications"` //list of the applications of the student
 }
 
-//!currently unesed
+// !currently unesed
 type StudentInfo struct {
 	Class               string `json:"classe"`
 	Year                int    `json:"anno"`
@@ -29,7 +29,7 @@ type StudentInfo struct {
 	IsIstiturePresident bool   `json:"rappresentante_istituto"`
 }
 
-//get student struct from the id (matricola)
+// get student struct from the id (matricola)
 func GetStudentFromID(userID int, connection *mongo.Database) (Student, error) {
 	var student Student
 	err := connection.Collection("users").
@@ -42,7 +42,7 @@ func GetStudentFromID(userID int, connection *mongo.Database) (Student, error) {
 	return student, nil
 }
 
-//check if the userUID is saved in the db
+// check if the userUID is saved in the db
 func IsUserRegistered(userID int, connection *mongo.Database) (bool, error) {
 	var user Student
 	err := connection.Collection("users").
@@ -61,7 +61,7 @@ func IsUserRegistered(userID int, connection *mongo.Database) (bool, error) {
 	return true, nil
 }
 
-//adds the student to the db (it's a pointer because here we generate the pfp)
+// adds the student to the db (it's a pointer because here we generate the pfp)
 func AddStudent(student *Student, connection *mongo.Database) error {
 	//check if it's already registered
 	exists, err := IsUserRegistered(student.ID, connection)
@@ -78,8 +78,8 @@ func AddStudent(student *Student, connection *mongo.Database) error {
 	return err
 }
 
-//given the paleoid access token and the database connection, it returns the response that
-//will be parsed into a json in the response, if the error is client side (4xx or 5xx) and an error
+// given the paleoid access token and the database connection, it returns the response that
+// will be parsed into a json in the response, if the error is client side (4xx or 5xx) and an error
 func registerOrGenerateTokenFromPaleoIDAccessToken(paleoidAccess string, connection *mongo.Database) (map[string]interface{}, bool, error) {
 	//get the student from the paleoid access token
 	student, err := GetStudentFromPaleoIDAccessToken(paleoidAccess)

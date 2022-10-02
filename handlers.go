@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -137,8 +138,8 @@ func (h Handler) OauthHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		resp.SuccessParse(w, http.StatusOK, "Token generated successfully", response)
-		return
+		//resp.SuccessParse(w, http.StatusOK, "Token generated successfully", response)
+		http.Redirect(w, r, "/user/", http.StatusSeeOther)
 	}
 
 	//check if a server generated state is stored in the session
@@ -239,7 +240,7 @@ func (h Handler) CheckOauthState(w http.ResponseWriter, r *http.Request) {
 	resp.SuccessParse(w, http.StatusBadRequest, "user logged in correctly, this token can't be used anymore now", response)
 }
 
-// get the user's informations from the ipaas access token
+// get the user's information from the ipaas access token
 func (h Handler) LoginHandler(w http.ResponseWriter, r *http.Request) {
 	db, err := connectToDB()
 	if err != nil {
@@ -350,12 +351,51 @@ func (h Handler) NewTokenPairFromRefreshTokenHandler(w http.ResponseWriter, r *h
 		Expires: time.Now().Add(time.Hour * 24 * 7),
 	})
 
-	//we also respond with the new tokens so the client doesn't have to depend from the cookies
+	//we also respond with the new tokens so the client doesn't have to depend on from the cookies
 	response := map[string]interface{}{
 		"ipaas-access-token":  accessToken,
 		"ipaas-refresh-token": newRefreshToken,
 	}
 	resp.SuccessParse(w, http.StatusOK, "New token pair generated", response)
+}
+
+func (h Handler) ValidGithubUrlAndGetBranches(w http.ResponseWriter, r *http.Request) {
+	//read the body and conver to string
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		resp.Errorf(w, http.StatusBadRequest, "error reading body: %v", err)
+		return
+	}
+
+	type Body struct {
+		Repo string `json:"repo"`
+	}
+
+	var bodyStruct Body
+	err = json.Unmarshal(body, &bodyStruct)
+	if err != nil {
+		resp.Errorf(w, http.StatusBadRequest, "error unmarshaling body: %v", err)
+		return
+	}
+	response := make(map[string]interface{})
+	//check if the url is valid
+	if err := h.util.ValidGithubUrl(bodyStruct.Repo); err != nil {
+		response["valid"] = false
+		resp.ErrorParse(w, http.StatusBadRequest, fmt.Sprintf("Invalid url: %v", err), response)
+		return
+	}
+
+	description, defaultBranch, branches, err := h.util.GetMetadataFromRepo(bodyStruct.Repo)
+	if err != nil {
+		resp.Error(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	response["defaultBranch"] = defaultBranch
+	response["description"] = description
+	response["branches"] = branches
+	response["valid"] = true
+
+	resp.SuccessParse(w, http.StatusOK, "valid github url", response)
 }
 
 //!===========================PAGES HANDLERS

@@ -22,20 +22,10 @@ type dbPost struct {
 	DbTableCollection string `json:"databaseTable"`
 }
 
-//TODO: ADD DB NAME
-//create a new database container given the db type, image, port, enviroment variables and volume
-//it returns the container id and an error
+// TODO: ADD DB NAME
+// create a new database container given the db type, image, port, enviroment variables and volume
+// it returns the container id and an error
 func (c ContainerController) CreateNewDB(conf dbContainerConfig, env []string) (string, error) {
-	// //pull the image, it wont pull it if it is already there
-	// //it will update itself since if there is no tag by default it means latest
-	// out, err := c.cli.ImagePull(c.ctx, conf.image, types.ImagePullOptions{})
-	// if err != nil {
-	// 	return "", err
-	// }
-	// defer out.Close()
-	// //!could be used to sent to the client the output of the pull
-	// // io.Copy(os.Stdout, out)
-
 	//container config (image and environment variables)
 	config := &container.Config{
 		Image: conf.image,
