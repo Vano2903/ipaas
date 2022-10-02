@@ -26,9 +26,9 @@ func init() {
 		panic("Error loading .env file")
 	}
 
-	DATABASE_URI = os.Getenv("DB_URI")
-	fmt.Println(DATABASE_URI)
-	JWT_SECRET = []byte(os.Getenv("JWT_SECRET"))
+	DatabaseUri = os.Getenv("DB_URI")
+	fmt.Println(DatabaseUri)
+	JwtSecret = []byte(os.Getenv("JWT_SECRET"))
 
 	conn, err := connectToDB()
 	if err != nil {
