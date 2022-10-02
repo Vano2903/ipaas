@@ -12,7 +12,7 @@ import (
 	resp "github.com/vano2903/ipaas/responser"
 )
 
-//homepage handler
+// homepage handler
 func (h Handler) HomePageHandler(w http.ResponseWriter, r *http.Request) {
 	//return the home html page
 	http.ServeFile(w, r, "./pages/home.html")
@@ -39,8 +39,10 @@ func (h Handler) UserPageHandler(w http.ResponseWriter, r *http.Request) {
 			cookie, err := r.Cookie("ipaas-refresh-token")
 			if err != nil {
 				if err == http.ErrNoCookie {
-					resp.Error(w, http.StatusBadRequest, "No refresh token")
+					//resp.Error(w, http.StatusBadRequest, "No refresh token")
+					http.Redirect(w, r, "/login", http.StatusSeeOther)
 					return
+
 				}
 				resp.Error(w, http.StatusInternalServerError, err.Error())
 				return
