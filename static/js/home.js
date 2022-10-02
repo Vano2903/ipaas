@@ -5,8 +5,8 @@ async function loadDatabases() {
     const res = await fetch('/api/user/getApps/database');
     const dbs = await res.json();
     if (dbs.error) {
-        if (apps.code == 498) {
-            newTokenPair(loadDatabases);
+        if (dbs.code === 498) {
+            await newTokenPair(loadDatabases);
         }
         alert(dbs.error);
         return
@@ -56,8 +56,8 @@ async function deleteContainer(containerId) {
     });
     const data = await res.json();
     if (data.error) {
-        if (apps.code == 498) {
-            newTokenPair(deleteContainer, containerId);
+        if (data.code === 498) {
+            await newTokenPair(deleteContainer, containerId);
         }
         alert(data.error);
         return
@@ -70,8 +70,8 @@ async function loadApplications() {
     const res = await fetch('/api/user/getApps/web');
     const apps = await res.json();
     if (apps.error) {
-        if (apps.code == 498) {
-            newTokenPair(loadApplications);
+        if (apps.code === 498) {
+            await newTokenPair(loadApplications);
         }
         alert(apps.error);
         return
@@ -131,8 +131,8 @@ async function makePublic(containerId) {
     });
     const data = await res.json();
     if (data.error) {
-        if (apps.code == 498) {
-            newTokenPair(makePublic, containerId);
+        if (data.code === 498) {
+            await newTokenPair(makePublic, containerId);
         }
         alert(data.error);
         return
@@ -147,8 +147,8 @@ async function makePrivate(containerId) {
     });
     const data = await res.json();
     if (data.error) {
-        if (apps.code == 498) {
-            newTokenPair(makePublic, containerId);
+        if (data.code === 498) {
+            await newTokenPair(makePublic, containerId);
         }
         alert(data.error);
         return
@@ -159,7 +159,7 @@ async function makePrivate(containerId) {
 }
 
 function create(what) {
-    if (what == "db") {
+    if (what === "db") {
         window.location.href = "/user/database/new";
     } else {
         window.location.href = "/user/application/new";
