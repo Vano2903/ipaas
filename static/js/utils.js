@@ -8,3 +8,11 @@ async function newTokenPair(callback, ...datas) {
     }
     callback(...datas);
 }
+
+function debounce(func, timeout = 600){
+    let timer;
+    return (...args) => {
+        clearTimeout(timer);
+        timer = setTimeout(() => { func.apply(this, args); }, timeout);
+    };
+}
