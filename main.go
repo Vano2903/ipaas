@@ -53,7 +53,7 @@ func main() {
 	mainRouter := mux.NewRouter()
 	mainRouter.PathPrefix("/static").Handler(http.StripPrefix("/static", http.FileServer(http.Dir("static/"))))
 
-	mainRouter.HandleFunc("/", handler.HomePageHandler)
+	mainRouter.HandleFunc("/", handler.UserPageHandler)
 	mainRouter.HandleFunc("/login", handler.LoginPageHandler)
 	mainRouter.HandleFunc("/{studentID}", handler.PublicStudentPageHandler)
 	// mainRouter.HandleFunc("/{studentID}/{appID}", handler.PublicAppPageHandler)
@@ -86,6 +86,8 @@ func main() {
 	//get the user data
 	//still kinda don't know what to do with this one, will probably return the homepage
 	userApiRouter.HandleFunc("/", handler.LoginHandler).Methods("GET")
+	//validate a GitHub repo and (if valid) returns the branches
+	userApiRouter.HandleFunc("/validate", handler.ValidGithubUrlAndGetBranches).Methods("POST")
 	//get all the applications (even the private one) must define the type (database, web, all)
 	userApiRouter.HandleFunc("/getApps/{type}", handler.GetAllApplicationsOfStudentPrivate).Methods("GET")
 	//update an application
@@ -120,6 +122,10 @@ func main() {
 	headersOk := handlers.AllowedHeaders([]string{"X-Requested-With"})
 	originsOk := handlers.AllowedOrigins([]string{"*"})
 	methodsOk := handlers.AllowedMethods([]string{"GET", "POST"})
+
+	//start event handler
+	log.Println("starting event handler")
+	go handler.cc.EventHandler()
 
 	log.Println("starting the server on port 8080")
 	log.Fatal(http.ListenAndServe(":8080", handlers.CORS(originsOk, headersOk, methodsOk)(mainRouter)))
