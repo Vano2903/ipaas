@@ -37,7 +37,7 @@ If you want more info about what you are doing check this out [docker post-insta
 - run `$ docker-compose up --build -d`
 - go run .
 
-_**for the sorint reviewr i send an email with a working .env file to hackersgen@sorint.it**_
+_**for the sorint reviewr i sent an email with a working .env file to hackersgen@sorint.it**_
 
 ### Latest Version
 Currently IPaaS is being developed as a microservice application and it's source code can be found [here](https://github.com/ipaas-org).
