@@ -17,7 +17,7 @@
     <link rel="stylesheet" href="/static/css/base.css">
     <link rel="stylesheet" href="/static/css/home.css">
 
-    <title>IPAAS</title>
+    <title>app | ipaas</title>
 </head>
 
 <body>
@@ -29,17 +29,25 @@
             <div id="signup1">
                 <div class="row g-0 py-2">
                     <div class="form-floating">
-                        <input type="url" class="form-control" id="giturl" autocomplete="off">
+                        <input type="url" class="form-control" id="giturl" autocomplete="off" required>
                         <label for="giturl">url della repo github</label>
                     </div>
+                    <div style="display:none;" class="alert alert-danger" id="err-github"></div>
                 </div>
                 <br>
 
                 <div class="form-floating">
-                    <select id="lang" class="form-select">
-                        <option selected>Open this select menu</option>
+                    <select id="branches" class="form-select" required>
+                        <option selected>Branches</option>
+                    </select>
+                    <label for="branches">Seleziona un branch</label>
+                </div>
+                <br>
+
+                <div class="form-floating">
+                    <select id="lang" class="form-select" required>
+                        <option selected>Espandi</option>
                         <option value="go">Go</option>
-                        <option value="C#" disabled>C#</option>
                         <option value="Python" disabled>Python</option>
                         <option value="Node" disabled>Node</option>
                         <option value="Rust" disabled>Rust</option>
@@ -47,12 +55,25 @@
                     <label for="lang">Linguaggio di programmazione</label>
                 </div>
                 <br>
+
                 <div class="form-floating">
-                    <input type="number" class="form-control" id="port" autocomplete="off">
-                    <label for="floatingPassword">Porta del server</label>
+                    <input type="number" class="form-control" id="port" autocomplete="off" required>
+                    <label for="port">Porta del server</label>
                 </div>
                 <br>
-                <button class="w-100 btn btn-lg btn-primary" type="button" onclick="createNewApplication()">crea
+
+                <div class="form-floating">
+                    <textarea class="form-control" id="desc"></textarea>
+                    <label for="desc">Descrizione dell'applicazione</label>
+                </div>
+                <br>
+
+                <div class="form-floating">
+                    <div id="env-container"></div>
+                    <button class="w-100 btn btn-lg btn-primary" type="button" onclick="addEnv()">Nuova variabile d'ambiente</button>
+                </div>
+                <br><br>
+                <button class="w-100 btn btn-lg btn-primary" id="creationButton" type="button" onclick="createNewApplication()">Crea
                     applicazione :D</button>
             </div>
         </form>
@@ -61,8 +82,8 @@
     </section>
 
     <script src="/static/js/homeUI.js"></script>
-    <script src="/static/js/create.js"></script>
     <script src="/static/js/utils.js"></script>
+    <script src="/static/js/create.js"></script>
 
 </body>
 
