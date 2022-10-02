@@ -165,6 +165,7 @@
 
 .card>p:nth-child(2) {
     color: white;
+    /*noinspection CssUnresolvedCustomProperty*/
     font-family: var(--bs-font-sans-serif);
     font-size: 1em;
     text-shadow: 1px 2px 7px #00000020;
