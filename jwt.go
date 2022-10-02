@@ -28,7 +28,7 @@ func NewSignedToken(claim CustomClaims) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claim)
 
 	//sign the token
-	return token.SignedString(JWT_SECRET)
+	return token.SignedString(JwtSecret)
 }
 
 func ParseToken(t string) (CustomClaims, error) {
@@ -36,7 +36,7 @@ func ParseToken(t string) (CustomClaims, error) {
 		t,
 		&CustomClaims{},
 		func(token *jwt.Token) (interface{}, error) {
-			return JWT_SECRET, nil
+			return JwtSecret, nil
 		},
 	)
 	if err != nil {
