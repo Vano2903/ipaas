@@ -17,12 +17,12 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
-//TODO: should delete the container/image in case of an error because it would stop the user to create again the application
-//new application handler let the user host a new application given:
-//1) github repository
-//2) programming lang
-//3) port of the program
-//! for now the only supported applications are web based one
+// TODO: should delete the container/image in case of an error because it would stop the user to create again the application
+// new application handler let the user host a new application given:
+// 1) GitHub repository
+// 2) programming lang
+// 3) port of the program
+// ! for now the only supported applications are web based one
 func (h Handler) NewApplicationHandler(w http.ResponseWriter, r *http.Request) {
 	//connect to the db
 	conn, err := connectToDB()
@@ -50,7 +50,7 @@ func (h Handler) NewApplicationHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Println(appPost)
 
 	//check that the appPost.GithubRepo is an actual url
-	if !h.util.ValidGithubUrl(appPost.GithubRepoUrl) {
+	if err := h.util.ValidGithubUrl(appPost.GithubRepoUrl); err != nil {
 		resp.Error(w, http.StatusBadRequest, "Invalid github repo url")
 		return
 	}
@@ -153,7 +153,7 @@ func (h Handler) NewApplicationHandler(w http.ResponseWriter, r *http.Request) {
 	resp.SuccessParse(w, http.StatusOK, "application created", toSend)
 }
 
-//delete a container given the container id, it will check if the user owns this application
+// delete a container given the container id, it will check if the user owns this application
 func (h Handler) DeleteApplicationHandler(w http.ResponseWriter, r *http.Request) {
 	//get the container from /{containerID}
 	containerID := mux.Vars(r)["containerID"]
@@ -204,14 +204,14 @@ func (h Handler) DeleteApplicationHandler(w http.ResponseWriter, r *http.Request
 	resp.Success(w, http.StatusOK, "container deleted successfully")
 }
 
-//!hold the port for the new container
-//!dont use a different one
-//*1) delete the old container
-//*2) download the repo from github
-//*3) build the image
-//*4) create the new container
-//*5) cleanups
-//! should delete old container lastly but for i gotta change way i create images
+// !hold the port for the new container
+// !don't use a different one
+// *1) delete the old container
+// *2) download the repo from GitHub
+// *3) build the image
+// *4) create the new container
+// *5) cleanups
+// ! should delete old container lastly, but I have to change the way I create images
 func (h Handler) UpdateApplicationHandler(w http.ResponseWriter, r *http.Request) {
 	//get the container from /{containerID}
 	containerID := mux.Vars(r)["containerID"]
@@ -352,8 +352,8 @@ func (h Handler) UpdateApplicationHandler(w http.ResponseWriter, r *http.Request
 	resp.SuccessParse(w, http.StatusOK, "application updated", toSend)
 }
 
-//it will return a json with all the applications owned by the student (even the privates one)
-//this endpoint will only be accessible if logged in
+// it will return a json with all the applications owned by the student (even the privates one)
+// this endpoint will only be accessible if logged in
 func (h Handler) GetAllApplicationsOfStudentPrivate(w http.ResponseWriter, r *http.Request) {
 	//get the {type} of the application from the url
 	typeOfApp := mux.Vars(r)["type"]
@@ -388,14 +388,22 @@ func (h Handler) GetAllApplicationsOfStudentPrivate(w http.ResponseWriter, r *ht
 	var apps []Application
 	if typeOfApp == "all" {
 		cur, err := applicationCollection.Find(context.TODO(), bson.M{"studentID": student.ID})
-		cur.All(context.TODO(), &apps)
+		if err != nil {
+			resp.Errorf(w, http.StatusInternalServerError, "error getting the applications: %v", err.Error())
+			return
+		}
+		err = cur.All(context.TODO(), &apps)
 		if err != nil {
 			resp.Errorf(w, http.StatusInternalServerError, "error getting the applications: %v", err.Error())
 			return
 		}
 	} else {
 		cur, err := applicationCollection.Find(context.TODO(), bson.M{"studentID": student.ID, "type": typeOfApp})
-		cur.All(context.TODO(), &apps)
+		if err != nil {
+			resp.Errorf(w, http.StatusInternalServerError, "error getting the applications: %v", err.Error())
+			return
+		}
+		err = cur.All(context.TODO(), &apps)
 		if err != nil {
 			resp.Errorf(w, http.StatusInternalServerError, "error getting the applications: %v", err.Error())
 			return
@@ -429,8 +437,8 @@ func (h Handler) GetAllApplicationsOfStudentPrivate(w http.ResponseWriter, r *ht
 	resp.SuccessParse(w, http.StatusOK, "Applications retrived successfully", applications)
 }
 
-//get all the public applications of a student given the student id
-//you dont need to be logged in to access this endpoint
+// get all the public applications of a student given the student id
+// you don't need to be logged in to access this endpoint
 func (h Handler) GetAllApplicationsOfStudentPublic(w http.ResponseWriter, r *http.Request) {
 	//get the {studentID} from the url
 	studentID, err := strconv.Atoi(mux.Vars(r)["studentID"])
@@ -456,7 +464,11 @@ func (h Handler) GetAllApplicationsOfStudentPublic(w http.ResponseWriter, r *htt
 		resp.Errorf(w, http.StatusInternalServerError, "error getting the applications: %v", err.Error())
 		return
 	}
-	cur.All(context.TODO(), &apps)
+	err = cur.All(context.TODO(), &apps)
+	if err != nil {
+		resp.Errorf(w, http.StatusInternalServerError, "error getting the applications: %v", err.Error())
+		return
+	}
 	resp.SuccessParse(w, http.StatusOK, fmt.Sprintf("Public applications of %d", studentID), apps)
 }
 
@@ -480,7 +492,7 @@ func (h Handler) PublishApplicationHandler(w http.ResponseWriter, r *http.Reques
 	}
 
 	//get the application from the database
-	conn.Collection("applications").UpdateOne(context.TODO(), bson.M{"containerID": containerId, "studentID": student.ID}, bson.M{"$set": bson.M{"isPublic": true}})
+	_, err = conn.Collection("applications").UpdateOne(context.TODO(), bson.M{"containerID": containerId, "studentID": student.ID}, bson.M{"$set": bson.M{"isPublic": true}})
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			resp.Error(w, http.StatusNotFound, "No application found, check if the container id is correct or make sure you own this container")
@@ -511,7 +523,7 @@ func (h Handler) RevokeApplicationHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	conn.Collection("applications").UpdateOne(context.TODO(), bson.M{"containerID": containerId, "studentID": student.ID}, bson.M{"$set": bson.M{"isPublic": false}})
+	_, err = conn.Collection("applications").UpdateOne(context.TODO(), bson.M{"containerID": containerId, "studentID": student.ID}, bson.M{"$set": bson.M{"isPublic": false}})
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			resp.Error(w, http.StatusNotFound, "No application found, check if the container id is correct or make sure you own this container")
