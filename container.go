@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"os/exec"
@@ -24,8 +25,9 @@ type ContainerController struct {
 	dbContainersConfigs map[string]dbContainerConfig
 }
 
-//given the creator id, port to expose (in the docker), name of the app, path for the tmp file, lang for the dockerfile and envs
-//it will return the image name, image id and a possible error
+// CreateImage creates an image given the creator id, port to expose (in the docker), name of the app,
+// path for the tmp file, lang for the dockerfile and envs.
+// It will return the image name, image id
 func (c ContainerController) CreateImage(creatorID, port int, name, path, language string, envs []Env) (string, string, error) {
 	//check if the language is supported
 	var found bool
@@ -64,8 +66,13 @@ func (c ContainerController) CreateImage(creatorID, port int, name, path, langua
 	if err != nil {
 		return "", "", err
 	}
-	f.WriteString(dockerfileWithEnvs)
-	f.Close()
+	_, err = f.WriteString(dockerfileWithEnvs)
+	if err != nil {
+		return "", "", err
+	}
+	if err := f.Close(); err != nil {
+		return "", "", err
+	}
 
 	fmt.Println("created the dockerfile")
 
@@ -102,8 +109,8 @@ func (c ContainerController) CreateImage(creatorID, port int, name, path, langua
 		return "", "", err
 	}
 
-	//read the resp.Body, its a way to wait for the image to be created
-	a, err := ioutil.ReadAll(resp.Body)
+	//read the resp.Body, it's a way to wait for the image to be created
+	a, err := io.ReadAll(resp.Body)
 	resp.Body.Close()
 	if err != nil {
 		return "", "", err
@@ -126,7 +133,7 @@ func (c ContainerController) CreateImage(creatorID, port int, name, path, langua
 	return imageName[0], strings.Replace(out.String(), "\n", "", -1), nil
 }
 
-//remove an image from the image id
+// RemoveImage removes an image given the image id
 func (c ContainerController) RemoveImage(imageID string) error {
 	//remove the image
 	_, err := c.cli.ImageRemove(context.Background(), imageID, types.ImageRemoveOptions{
@@ -135,11 +142,8 @@ func (c ContainerController) RemoveImage(imageID string) error {
 	return err
 }
 
-//get the first port opened by the container on the host machine,
-//the sleeps are for windows, when tested on linux they were not necesseary
+// GetContainerExternalPort gets the first port opened by the container on the host machine,
 func (c ContainerController) GetContainerExternalPort(id, containerPort string) (string, error) {
-	//!the sleeps looks like it's only required for windows
-	// time.Sleep(time.Second)
 
 	//same as docker inspect <id>
 	container, err := c.cli.ContainerInspect(c.ctx, id)
@@ -152,7 +156,9 @@ func (c ContainerController) GetContainerExternalPort(id, containerPort string) 
 	i := 0
 	var natted []nat.PortBinding
 	for {
+		// the sleeps are for windows, when tested on linux they were not necesseary
 		time.Sleep(time.Second)
+
 		if i > 5 {
 			return "", fmt.Errorf("error getting the port of the container")
 		}
@@ -166,9 +172,9 @@ func (c ContainerController) GetContainerExternalPort(id, containerPort string) 
 	return natted[0].HostPort, nil
 }
 
-//search a volume by name and returns a pointer to the volume (type volumeType.Volume) and an error
-//if the volume doesn't exist the volume pointer will be nil
-func (c *ContainerController) FindVolume(name string) (volume *types.Volume, err error) {
+// FindVolume searchs a volume by name and returns a pointer to the volume (type volumeType.Volume) and an error.
+// If the volume doesn't exist the volume pointer will be nil
+func (c ContainerController) FindVolume(name string) (volume *types.Volume, err error) {
 	//get all the volumes
 	volumes, err := c.cli.VolumeList(context.Background(), filters.NewArgs())
 	if err != nil {
@@ -184,9 +190,9 @@ func (c *ContainerController) FindVolume(name string) (volume *types.Volume, err
 	return nil, nil
 }
 
-//check if a volume exists, if so returns false, the volume and an error
-//if it doesn't exists it will be created and the output will be true, the volume and an error
-func (c *ContainerController) EnsureVolume(name string) (created bool, volume *types.Volume, err error) {
+// EnsureVolume checks if a volume exists, if so returns false, the volume and an error.
+// If it doesn't exist it will be created and the output will be true, the volume and an error
+func (c ContainerController) EnsureVolume(name string) (created bool, volume *types.Volume, err error) {
 	//check if the volume exists (if it doesn't volume will be nil)
 	volume, err = c.FindVolume(name)
 	if err != nil {
@@ -206,8 +212,8 @@ func (c *ContainerController) EnsureVolume(name string) (created bool, volume *t
 	return true, &vol, err
 }
 
-//delete a volume (only if the volume exists, if it doesnt the function will return false)
-func (c *ContainerController) RemoveVolume(name string) (removed bool, err error) {
+// RemoveVolume deletes a volume
+func (c ContainerController) RemoveVolume(name string) (removed bool, err error) {
 	//search the volume
 	vol, err := c.FindVolume(name)
 	if err != nil {
@@ -227,14 +233,14 @@ func (c *ContainerController) RemoveVolume(name string) (removed bool, err error
 	return true, nil
 }
 
-//forcefully remove a container from the container id
-func (c *ContainerController) DeleteContainer(containerID string) error {
+// DeleteContainer forcefully removes a container given the container id
+func (c ContainerController) DeleteContainer(containerID string) error {
 	return c.cli.ContainerRemove(c.ctx, containerID, types.ContainerRemoveOptions{
 		Force: true,
 	})
 }
 
-func (c *ContainerController) GetContainerLogs(containerID string) (string, error) {
+func (c ContainerController) GetContainerLogs(containerID string) (string, error) {
 	reader, err := c.cli.ContainerLogs(c.ctx, containerID, types.ContainerLogsOptions{
 		ShowStdout: true,
 		ShowStderr: true,
@@ -245,14 +251,14 @@ func (c *ContainerController) GetContainerLogs(containerID string) (string, erro
 		return "", err
 	}
 	defer reader.Close()
-	logs, err := ioutil.ReadAll(reader)
+	logs, err := io.ReadAll(reader)
 	if err != nil {
 		return "", err
 	}
 	return string(logs), nil
 }
 
-func (c *ContainerController) GetContainerStatus(id string) (string, error) {
+func (c ContainerController) GetContainerStatus(id string) (string, error) {
 	container, err := c.cli.ContainerInspect(c.ctx, id)
 	if err != nil {
 		return "", err
@@ -260,7 +266,7 @@ func (c *ContainerController) GetContainerStatus(id string) (string, error) {
 	return container.State.Status, nil
 }
 
-//create a new controller
+// NewContainerController creates a new controller
 func NewContainerController() (*ContainerController, error) {
 	var err error
 
