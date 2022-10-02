@@ -17,7 +17,7 @@
     <link rel="stylesheet" href="/static/css/base.css">
     <link rel="stylesheet" href="/static/css/home.css">
 
-    <title>IPAAS</title>
+    <title>home | ipaas</title>
 </head>
 
 <body>
@@ -58,7 +58,7 @@
             <img src="{{.Pfp}}">
         </div>
 
-        <div id="logo" onclick="transition('applications','wallet')">
+        <div id="logo1" class="logo" onclick="transition('applications','wallet')">
             <p>Torna alla home</p>
             <!-- <img src="..\..\static\]media\common\brand\purseFAV.png"> -->
         </div>
@@ -90,7 +90,7 @@
     <section id="databases">
         <h1 id="traveltit">I tuoi <b class="theme-color">DB</b></h1>
 
-        <div id="logo" onclick="transition('databases','wallet')">
+        <div id="logo2" class="logo" onclick="transition('databases','wallet')">
             <p>Torna alla home</p>
             <!-- <img src="..\..\static\]media\common\brand\purseFAV.png"> -->
         </div>
@@ -128,7 +128,7 @@
 
     <div id="logoutconfirm">
         <div>
-            <h3>Do you want to logout?</h3>
+            <h3>Do you want to log out?</h3>
             <br>
             <button class="w-100 btn btn-lg btn-primary" type="button" onclick="logout()">Logout</button>
             <p class="underline" onclick="logoutconfirm(0)">No, keep me logged in</p>
