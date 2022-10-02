@@ -24,8 +24,7 @@ Furthermore, IPaaS does not limit the number of applications that can be hosted 
 
 ### Requirements:
 - docker-compose
-- docker: make sure you have sudo privileges on the docker group, if you don't wanna do that than run `go build .` and run the binary as sudo)
-If you want more info about what you are doing check this out [docker post-installation on linux](https://docs.docker.com/engine/install/linux-postinstall/)
+- docker: make sure you have sudo privileges on the docker group (check this out to know how to do so [docker post-installation on linux](https://docs.docker.com/engine/install/linux-postinstall/)), if you don't wanna do that tho then run `go build .` and run the binary as sudo
 - required images (to install them run `docker pull <image name>`:
   - golang:1-alpine3.15
   - mysql:8.0.28-oracle
