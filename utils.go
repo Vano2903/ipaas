@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/tidwall/gjson"
+	"io"
 	"math/rand"
 	"net"
 	"net/http"
@@ -25,8 +27,8 @@ var (
 	upperCharSet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 	numberSet    = "0123456789"
 	allCharSet   = lowerCharSet + upperCharSet + numberSet
-	DATABASE_URI string
-	JWT_SECRET   []byte
+	DatabaseUri  string
+	JwtSecret    []byte
 )
 
 type Util struct {
@@ -67,38 +69,86 @@ func (u Util) GetUserFromCookie(r *http.Request, connection *mongo.Database) (St
 	return s, nil
 }
 
-// check if a url is a valid github repo download url (github.com/name/example.git)
-func (u Util) ValidGithubUrl(url string) bool {
-	if !strings.HasPrefix(url, "https://github.com/") {
-		return false
+// ValidGithubUrl check if an url is a valid and existing GitHub repo url
+// !should allow other git remotes (I.E. gitlab)
+func (u Util) ValidGithubUrl(url string) error {
+	//sanitize the url
+	url = strings.TrimSpace(url)
+	url = strings.ToLower(url)
+
+	if !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
+		url = "https://" + url
 	}
 
-	if !strings.HasSuffix(url, ".git") {
-		return false
+	if !strings.HasPrefix(url, "https://github.") &&
+		!strings.HasPrefix(url, "http://github.") &&
+		!strings.HasPrefix(url, "https://www.github.") &&
+		!strings.HasPrefix(url, "http://www.github.") {
+		return errors.New("url is not a github url, make sure it starts with, at least, github.com")
 	}
 
-	return true
+	resp, err := http.Get(url)
+	if err != nil {
+		return err
+	}
+
+	if resp.StatusCode != 200 {
+		return errors.New("invalid url, check if the url is correct or if the repo is not private")
+	}
+
+	return nil
 }
 
-// TODO: branch is not used yet, should be implemented
-// this function clone the repository from github given the url and save it in the tmp folder
-// it returns the name of the path, name and last commit hash and a possible error
+// GetUserAndNameFromRepoUrl get the username of the creator and the repository's name given a GitHub repository url
+func (u Util) GetUserAndNameFromRepoUrl(url string) (string, string, error) {
+	err := u.ValidGithubUrl(url)
+	if err != nil {
+		return "", "", err
+	}
+
+	url = strings.TrimSuffix(url, ".git")
+	split := strings.Split(url, "/")
+
+	return split[len(split)-2], split[len(split)-1], nil
+}
+
+// DownloadGithubRepo clones the repository from GitHub given the url and save it in the tmp folder,
+// if the download successfully complete the name of the path, name and last commit hash will be returned
 func (u Util) DownloadGithubRepo(userID int, branch, url string) (string, string, string, error) {
+	//sanitize the url
+	url = strings.TrimSpace(url)
+	url = strings.ToLower(url)
+
+	if !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
+		url = "https://" + url
+	}
+
 	//get the name of the repo
 	fmt.Print("getting repo name...")
-	repoName := strings.Split(strings.Replace(url, ".git", "", -1), "/")[len(strings.Split(strings.Replace(url, ".git", "", -1), "/"))-1]
-	fmt.Println("ok, repo name:", repoName)
+	_, repoName, err := u.GetUserAndNameFromRepoUrl(url)
+	if err != nil {
+		fmt.Println("err")
+		return "", "", "", err
+	}
+	fmt.Println("ok")
+	fmt.Println("repo name:", repoName)
 
 	//get the repo name
-	fmt.Printf("downloading repo in ./tmp/%d-%s...", userID, repoName)
-	r, err := git.PlainClone(fmt.Sprintf("./tmp/%d-%s", userID, repoName), false, &git.CloneOptions{
-		URL:          url,
-		Depth:        1,
-		SingleBranch: true,
-		// ReferenceName: plumbing.ReferenceName("refs/heads/" + branch),
+	tmpPath := fmt.Sprintf("./tmp/%d-%s-%s", userID, repoName, branch)
+	err = os.Mkdir(tmpPath, os.ModePerm)
+	if err != nil {
+		return "", "", "", fmt.Errorf("error creating the tmp folder: %v", err)
+	}
+	fmt.Printf("downloading repo in %s...", tmpPath)
+	r, err := git.PlainClone(fmt.Sprintf("%s", tmpPath), false, &git.CloneOptions{
+		URL:           url,
+		Depth:         1,
+		SingleBranch:  true,
+		ReferenceName: plumbing.ReferenceName("refs/heads/" + branch),
 		// Progress: os.Stdout,
 	})
 	if err != nil {
+		fmt.Println("err")
 		return "", "", "", err
 	}
 	fmt.Println("ok")
@@ -113,33 +163,77 @@ func (u Util) DownloadGithubRepo(userID int, branch, url string) (string, string
 	fmt.Print("getting last commit hash...")
 	commitHash, err := logs.Next()
 	if err != nil {
+		fmt.Println("err")
 		return "", "", "", err
 	}
 	fmt.Println("ok")
 
 	//remove the .git folder
 	fmt.Print("removing .git...")
-	if err := os.RemoveAll(fmt.Sprintf("./tmp/%d-%s/.git", userID, repoName)); err != nil {
+	if err := os.RemoveAll(fmt.Sprintf("%s/.git", tmpPath)); err != nil {
+		fmt.Println("err")
 		return "", "", "", err
 	}
-
 	fmt.Println("ok")
-	return fmt.Sprintf("./tmp/%d-%s", userID, repoName), repoName, commitHash.Hash.String(), nil
+	return fmt.Sprintf("%s", tmpPath), repoName, commitHash.Hash.String(), nil
 }
 
-// given a github repository url it will return the name of the repo and the owner
-func (u Util) GetUserAndNameFromRepoUrl(url string) (string, string) {
-	url = url[19 : len(url)-4]
-	fmt.Println("new URL:", url)
-	split := strings.Split(url, "/")
-	return split[0], split[1]
+// GetMetadataFromRepo gets the description, default branch and all the branches of a GitHub repository
+func (u Util) GetMetadataFromRepo(url string) (description, defaultBranch string, branches []string, err error) {
+	username, repoName, err := u.GetUserAndNameFromRepoUrl(url)
+	if err != nil {
+		return "", "", nil, err
+	}
+	resp, err := http.Get(fmt.Sprintf("https://api.github.com/repos/%s/%s", username, repoName))
+	if err != nil {
+		return "", "", nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return "", "", nil, fmt.Errorf("error finding the repository: %v", resp.Status)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", "", nil, err
+	}
+	jsonBody := string(body)
+
+	defaultBranch = gjson.Get(jsonBody, "default_branch").String()
+	description = gjson.Get(jsonBody, "description").String()
+	//get the branches
+	resp, err = http.Get(fmt.Sprintf("https://api.github.com/repos/%s/%s/branches", username, repoName))
+	if err != nil {
+		return "", "", nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return "", "", nil, fmt.Errorf("error finding the repository: %v", resp.Status)
+	}
+
+	body, err = io.ReadAll(resp.Body)
+	if err != nil {
+		return "", "", nil, err
+	}
+	jsonBody = string(body)
+	branchesRes := gjson.Get(jsonBody, "@this.#.name").Array()
+	for _, r := range branchesRes {
+		branches = append(branches, r.String())
+	}
+	return description, defaultBranch, branches, nil
 }
 
+// HasLastCommitChanged will check if the last commit of a GitHub url is different from the given to the function
 // TODO: should read just the last one not all the commits in the json
-// given the github information of a repo it will tell if the commit has changed in the remote repo
 func (u Util) HasLastCommitChanged(commit, url, branch string) (bool, error) {
-	//get request to the github api
-	owner, name := u.GetUserAndNameFromRepoUrl(url)
+	//get request to the GitHub api
+	owner, name, err := u.GetUserAndNameFromRepoUrl(url)
+	if err != nil {
+		return false, err
+	}
+
 	fmt.Printf("https://api.github.com/repos/%s/%s/commits?sha=%s\n", owner, name, branch)
 	req, err := http.NewRequest("GET", fmt.Sprintf("https://api.github.com/repos/%s/%s/commits?sha=%s", owner, name, branch), nil)
 	if err != nil {
@@ -151,12 +245,10 @@ func (u Util) HasLastCommitChanged(commit, url, branch string) (bool, error) {
 	}
 
 	//read the response
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return false, err
 	}
-
-	fmt.Println("body 1:", string(body))
 
 	//if there is an error return the message
 	if resp.StatusCode != 200 {
@@ -165,7 +257,7 @@ func (u Util) HasLastCommitChanged(commit, url, branch string) (bool, error) {
 		if err != nil {
 			return false, err
 		}
-		return false, fmt.Errorf("application: %s/%s returned a status code: %d, message: %s", owner, name, resp.StatusCode, Error.Message)
+		return false, fmt.Errorf("application: %s/%s returned %d as status code, message: %s", owner, name, resp.StatusCode, Error.Message)
 	}
 
 	var RepoCommits []GithubCommit
@@ -174,7 +266,7 @@ func (u Util) HasLastCommitChanged(commit, url, branch string) (bool, error) {
 		return false, err
 	}
 
-	//check if repo dosen't have commits
+	//check if repo doesn't have commits
 	if len(RepoCommits) == 0 {
 		return false, errors.New("no commit found")
 	}
@@ -191,10 +283,10 @@ func NewUtil(ctx context.Context) (*Util, error) {
 // returns a connection to the ipaas database
 func connectToDB() (*mongo.Database, error) {
 	//get context
-	ctx, _ := context.WithTimeout(context.TODO(), 10*time.Second)
-
+	ctx, cancel := context.WithTimeout(context.TODO(), 10*time.Second)
+	defer cancel()
 	//try to connect
-	clientOptions := options.Client().ApplyURI(DATABASE_URI)
+	clientOptions := options.Client().ApplyURI(DatabaseUri)
 	client, err := mongo.Connect(ctx, clientOptions)
 	if err != nil {
 		return nil, err
@@ -204,7 +296,7 @@ func connectToDB() (*mongo.Database, error) {
 }
 
 func initDatabase(db *mongo.Database) error {
-	var collections []string = []string{
+	collections := []string{
 		"users",
 		"applications",
 		"langs",
