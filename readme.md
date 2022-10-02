@@ -21,17 +21,22 @@ Furthermore, IPaaS does not limit the number of applications that can be hosted 
 - [Go](https://go.dev): Go is the main programming language as it is used for the entire back-end.
 - html/css/js: The front-end is built with the HTML markup language, styling in CSS and application logic in JavaScript and related frameworks.
 - [Docker](https://www.docker.com): Thanks to docker the application can containerize databases and applications created by the end users.
+
+### Requirements:
+- docker-compose
+- docker: make sure you have sudo privileges on the docker group (check this out to know how to do so [docker post-installation on linux](https://docs.docker.com/engine/install/linux-postinstall/)), if you don't wanna do that tho then run `go build .` and run the binary as sudo
+- required images (to install them run `docker pull <image name>`:
+  - golang:1-alpine3.15
+  - mysql:8.0.28-oracle
+  - mariadb:10.8.2-rc-focal
+  - mongo:5.0.6
+
 ### How to use:
+- Make sure to create a .env environent following the .env.example file
+- run `$ docker-compose up --build -d`
+- go run .
 
-_**The application is still under development.**
-When it is made available to the public to which it has been prepared, it will be indicated in this paragraph how to use the program._
-
-
-###### | Example:
-```golang
-var example ipaas.Example
-example.Say("Hello everyone!")
-```
+_**for the sorint reviewr i sent an email with a working .env file to hackersgen@sorint.it**_
 
 ### Latest Version
 Currently IPaaS is being developed as a microservice application and it's source code can be found [here](https://github.com/ipaas-org).
