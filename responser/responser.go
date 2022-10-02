@@ -19,12 +19,12 @@ func Error(w http.ResponseWriter, code int, message string) {
 func ErrorParse(w http.ResponseWriter, code int, message string, values interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
-	json, e := json.Marshal(values)
+	resp, e := json.Marshal(values)
 	if e != nil {
 		Errorf(w, http.StatusInternalServerError, "Error marshalling json: %s", e)
 		return
 	}
-	fmt.Fprintf(w, `{"code": %d, "msg":"%s", "error": true, "data":%s}`, code, message, json)
+	fmt.Fprintf(w, `{"code": %d, "msg":"%s", "error": true, "data":%s}`, code, message, resp)
 }
 
 func ErrorJson(w http.ResponseWriter, code int, message string, json []byte) {
@@ -46,12 +46,12 @@ func Success(w http.ResponseWriter, code int, message string) {
 func SuccessParse(w http.ResponseWriter, code int, message string, values interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
-	json, e := json.Marshal(values)
+	resp, e := json.Marshal(values)
 	if e != nil {
 		Errorf(w, http.StatusInternalServerError, "Error marshalling json: %s", e)
 		return
 	}
-	fmt.Fprintf(w, `{"code": %d, "msg":"%s", "error": false, "data":%s}`, code, message, json)
+	fmt.Fprintf(w, `{"code": %d, "msg":"%s", "error": false, "data":%s}`, code, message, resp)
 }
 
 func SuccessJson(w http.ResponseWriter, code int, message string, json []byte) {
