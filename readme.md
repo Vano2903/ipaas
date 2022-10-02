@@ -15,14 +15,14 @@ As anticipated, the program allows users to distribute their application on the 
 The main difference compared to other competitors in the sector lies in the simplification of use for students. The only requirement is to have an email from the institution, without requiring a credit card to verify its authenticity.
 Furthermore, IPaaS does not limit the number of applications that can be hosted by a single user, does not impose a maximum hour limit for hosted applications, and does not require payments or subscriptions of any kind.
 
-
-### Used technologies:
+### Used technologies
 
 - [Go](https://go.dev): Go is the main programming language as it is used for the entire back-end.
 - html/css/js: The front-end is built with the HTML markup language, styling in CSS and application logic in JavaScript and related frameworks.
 - [Docker](https://www.docker.com): Thanks to docker the application can containerize databases and applications created by the end users.
 
-### Requirements:
+### Requirements
+
 - docker-compose
 - docker: make sure you have sudo privileges on the docker group (check this out to know how to do so [docker post-installation on linux](https://docs.docker.com/engine/install/linux-postinstall/)), if you don't wanna do that tho then run `go build .` and run the binary as sudo
 - required images (to install them run `docker pull <image name>`:
@@ -31,19 +31,22 @@ Furthermore, IPaaS does not limit the number of applications that can be hosted 
   - mariadb:10.8.2-rc-focal
   - mongo:5.0.6
 
-### How to use:
+### How to use
+
 - Make sure to create a .env environent following the .env.example file
 - run `$ docker-compose up --build -d`
 - go run .
 
 _**for the sorint reviewr i sent an email with a working .env file to hackersgen@sorint.it**_
 
-### Example:
+### Example
+
 you can use this repo [vano2903/testing](https://github.com/Vano2903/testing/) as a testing webserver
 
 ### Latest Version
+
 Currently IPaaS is being developed as a microservice application and it's source code can be found [here](https://github.com/ipaas-org).
-For now though this repository has a working version, when the microservice version will be stable enough this repo will be archived. 
+For now though this repository has a working version, when the microservice version will be stable enough this repo will be archived.
 
 ### Credits:
 
@@ -63,5 +66,4 @@ If you feel you can make an even greater contribution, consider joining the proj
 [issues-url]: https://github.com/vano2903/ipaas/issues
 [license-shield]: https://img.shields.io/github/license/vano2903/ipaas.svg?style=for-the-badge
 [license-url]: https://github.com/vano2903/ipaas/blob/master/LICENSE.txt
-
 [product-screenshot]: images/screenshot.png
