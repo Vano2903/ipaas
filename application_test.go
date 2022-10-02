@@ -18,7 +18,7 @@ func TestCreateNewApplicationFromRepo(t *testing.T) {
 		t.Log("repo:", repo)
 		t.Log("creatorID:", creatorID)
 		t.Log("branch:", branch)
-		if !u.ValidGithubUrl(repo) {
+		if err := u.ValidGithubUrl(repo); err != nil {
 			t.Fatalf("%s is not a valid github url", repo)
 		}
 		var name, lastCommit string
