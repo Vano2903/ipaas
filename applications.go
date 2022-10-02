@@ -48,7 +48,7 @@ type Env struct {
 	Value string `bson:"value" json:"value"`
 }
 
-//create a container from an image which is the one created from a student's repository
+// CreateNewApplicationFromRepo creates a container from an image which is the one created from a student's repository
 func (c ContainerController) CreateNewApplicationFromRepo(creatorID int, port, name, language, imageName string) (string, error) {
 	//generic configs for the container
 	containerConfig := &container.Config{
@@ -99,8 +99,9 @@ func (c ContainerController) CreateNewApplicationFromRepo(creatorID int, port, n
 	return containerBody.ID, nil
 }
 
-//return the application metadata from the container id
-//it can be specified if to check if the last commit has changed and to retrive the envs
+// GetAppInfoFromContainer returns the application metadata from the container id.
+// The parameter checkCommit will make the function check if the last commit changed, if so the application
+// returned will have isUpdatable set to true.
 func (c ContainerController) GetAppInfoFromContainer(containerId string, checkCommit bool, util *Util) (Application, error) {
 	db, err := connectToDB()
 	if err != nil {
