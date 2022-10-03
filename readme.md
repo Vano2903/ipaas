@@ -52,6 +52,8 @@ If an error is returned with body `User already exists` it means that another us
 
 **This account will be closed after a day of being created as it's a test user used to test to behaviour of the application.**
 
+If you prefer there is a web page at /mock where you can create a mock user using a gui.
+
 you can use this repo [vano2903/testing](https://github.com/Vano2903/testing/) as a testing webserver
 
 ### Latest Version
