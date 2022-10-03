@@ -1,14 +1,13 @@
 package main
 
 import (
-	"context"
 	"log"
 	"net/http"
 
 	resp "github.com/vano2903/ipaas/responser"
 )
 
-//check if the user has a valid access Token
+// check if the user has a valid access Token
 func (h Handler) TokensMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		log.Println("tokens middleware")
@@ -28,14 +27,6 @@ func (h Handler) TokensMiddleware(next http.Handler) http.Handler {
 			resp.Error(w, 498, "No access token")
 			return
 		}
-
-		//create a connection with the db
-		db, err := connectToDB()
-		if err != nil {
-			resp.Error(w, http.StatusInternalServerError, err.Error())
-			return
-		}
-		defer db.Client().Disconnect(context.TODO())
 
 		//check if it's expired
 		if IsJWTexpired(accessToken) {

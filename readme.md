@@ -41,6 +41,17 @@ _**for the sorint reviewr i sent an email with a working .env file to hackersgen
 
 ### Example
 
+if you don't have a paleoID identity (an email that has as domain @itispaleocapa.it) but still would
+like to test the application then do a post request to:
+`/api/mock/create`
+with body a raw json with such fields:
+`{ "password":"aNicePassWord", "name": "aNiceName", "userID":"1234" } `
+
+Make sure that userID is a number.
+If an error is returned with body `User already exists` it means that another user has that userID so choose another one.
+
+**This account will be closed after a day of being created as it's a test user used to test to behaviour of the application.**
+
 you can use this repo [vano2903/testing](https://github.com/Vano2903/testing/) as a testing webserver
 
 ### Latest Version

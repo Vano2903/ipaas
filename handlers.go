@@ -5,8 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"go.mongodb.org/mongo-driver/bson/primitive"
-	"golang.org/x/crypto/bcrypt"
 	"io"
 	"log"
 	"net/http"
@@ -14,6 +12,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"go.mongodb.org/mongo-driver/bson/primitive"
+	"golang.org/x/crypto/bcrypt"
 
 	"github.com/gorilla/mux"
 	"github.com/gorilla/sessions"
@@ -473,8 +474,8 @@ func (h Handler) MockRegisterUserHandler(w http.ResponseWriter, r *http.Request)
 
 	//create the user
 	mockUser := struct {
-		UserID int `json:"userID"`
 		//Email        string    `bson:"email"`
+		UserID       int       `bson:"userID"`
 		Password     string    `bson:"password"`
 		Name         string    `bson:"name"`
 		Pfp          string    `bson:"pfp"`

@@ -42,7 +42,6 @@ func (h Handler) UserPageHandler(w http.ResponseWriter, r *http.Request) {
 					//resp.Error(w, http.StatusBadRequest, "No refresh token")
 					http.Redirect(w, r, "/login", http.StatusSeeOther)
 					return
-
 				}
 				resp.Error(w, http.StatusInternalServerError, err.Error())
 				return
