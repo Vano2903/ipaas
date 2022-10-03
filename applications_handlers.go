@@ -73,7 +73,7 @@ func (h Handler) NewApplicationHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	//create the image from the repo downloaded
-	imageName, imageID, err := h.cc.CreateImage(student.ID, port, name, repo, appPost.Language, appPost.Envs)
+	imageName, imageID, err := h.cc.CreateImage(student.ID, port, name, repo, appPost.GithubBranch, appPost.Language, appPost.Envs)
 	if err != nil {
 		resp.Errorf(w, http.StatusInternalServerError, "error creating the image: %v", err.Error())
 		return
@@ -284,7 +284,7 @@ func (h Handler) UpdateApplicationHandler(w http.ResponseWriter, r *http.Request
 	}
 
 	//create the image from the repo downloaded
-	imageName, _, err := h.cc.CreateImage(student.ID, Intport, name, repo, app.Lang, app.Envs)
+	imageName, _, err := h.cc.CreateImage(student.ID, Intport, name, repo, app.GithubBranch, app.Lang, app.Envs)
 	if err != nil {
 		resp.Errorf(w, http.StatusInternalServerError, "error creating the image: %v", err.Error())
 		return

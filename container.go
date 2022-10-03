@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/docker/docker/pkg/archive"
 	"io"
 	"io/ioutil"
 	"os"
@@ -15,7 +16,6 @@ import (
 	"github.com/docker/docker/api/types/filters"
 	volumeType "github.com/docker/docker/api/types/volume"
 	"github.com/docker/docker/client"
-	"github.com/docker/docker/pkg/archive"
 	"github.com/docker/go-connections/nat"
 )
 
@@ -25,10 +25,10 @@ type ContainerController struct {
 	dbContainersConfigs map[string]dbContainerConfig
 }
 
-// CreateImage creates an image given the creator id, port to expose (in the docker), name of the app,
-// path for the tmp file, lang for the dockerfile and envs.
-// It will return the image name, image id
-func (c ContainerController) CreateImage(creatorID, port int, name, path, language string, envs []Env) (string, string, error) {
+// CreateImage will create an image given the creator id, port to expose (in the docker),
+// name of the app, path for the tmp file, lang for the dockerfile and envs, if no error occurs
+// the function will return the image name and image id
+func (c ContainerController) CreateImage(creatorID, port int, name, branch, path, language string, envs []Env) (string, string, error) {
 	//check if the language is supported
 	var found bool
 	for _, l := range Langs {
@@ -49,8 +49,7 @@ func (c ContainerController) CreateImage(creatorID, port int, name, path, langua
 		return "", "", err
 	}
 
-	//set the env variables in a string with syntax
-	//ENV key value
+	//set the env variables in a string with syntax: ENV key value
 	var envString string
 	for _, env := range envs {
 		envString += fmt.Sprintf("ENV %s %s\n", env.Key, env.Value)
@@ -66,15 +65,14 @@ func (c ContainerController) CreateImage(creatorID, port int, name, path, langua
 	if err != nil {
 		return "", "", err
 	}
-	_, err = f.WriteString(dockerfileWithEnvs)
-	if err != nil {
+	if _, err := f.WriteString(dockerfileWithEnvs); err != nil {
 		return "", "", err
 	}
 	if err := f.Close(); err != nil {
 		return "", "", err
 	}
 
-	fmt.Println("created the dockerfile")
+	fmt.Println("dockerfile created")
 
 	//create a build context, is a tar with the temp repo,
 	//needed since we are not using the filesystem as a context
@@ -87,9 +85,10 @@ func (c ContainerController) CreateImage(creatorID, port int, name, path, langua
 	defer buildContext.Close()
 	fmt.Println("build the context:", &buildContext)
 
-	//create the name for the image <creatorID>-<name>-<language>
-	imageName := []string{fmt.Sprintf("%d-%s-%s", creatorID, name, language)}
+	//create the name for the image <creatorID>-<name>-<branch>-<language>
+	imageName := []string{fmt.Sprintf("%d-%s-%s-%s", creatorID, name, branch, language)}
 	fmt.Println("image name:", imageName[0])
+
 	//create the image from the dockerfile
 	//we are setting some default labels and the flag -rm -f
 	//!should set memory and cpu limit
@@ -111,26 +110,32 @@ func (c ContainerController) CreateImage(creatorID, port int, name, path, langua
 
 	//read the resp.Body, it's a way to wait for the image to be created
 	a, err := io.ReadAll(resp.Body)
-	resp.Body.Close()
+	err = resp.Body.Close()
 	if err != nil {
 		return "", "", err
 	}
 	fmt.Println("body:", string(a))
+
 	//find the id of the image just created
 	var out bytes.Buffer
-
-	//check if image generated errors
-	// values := strings.Split(string(a), "\n")
-	// for _, v := range values {}
-
 	cmd := exec.CommandContext(c.ctx, "docker", "images", "-q", imageName[0])
 	cmd.Stdout = &out
-	err = cmd.Run()
-	if err != nil {
+	if err := cmd.Run(); err != nil {
 		return "", "", err
 	}
+	imageID := strings.Replace(out.String(), "\n", "", -1)
 
-	return imageName[0], strings.Replace(out.String(), "\n", "", -1), nil
+	if !c.CheckIfImageCompiled(string(a)) {
+		return "", imageID, fmt.Errorf("image %s compiled incorrectly", imageName[0])
+	}
+
+	return imageName[0], imageID, nil
+}
+
+// CheckIfImageCompiled will check the output of the image build to see if the image was compiled correctly
+func (c ContainerController) CheckIfImageCompiled(imageBuildOutput string) bool {
+	lines := strings.Split(imageBuildOutput, "\n")
+	return strings.Contains(lines[len(lines)-2], "Successfully tagged")
 }
 
 // RemoveImage removes an image given the image id

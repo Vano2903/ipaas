@@ -37,8 +37,9 @@ func TestCreateNewApplicationFromRepo(t *testing.T) {
 		port := 8080
 		name := "test"
 		language := "go"
+		branch := "master"
 
-		imageName, imageID, err = c.CreateImage(creatorID, port, name, tmpPath, language, nil)
+		imageName, imageID, err = c.CreateImage(creatorID, port, name, branch, tmpPath, language, nil)
 		if err != nil {
 			t.Fatalf("error has been generated: %s", err)
 		}
