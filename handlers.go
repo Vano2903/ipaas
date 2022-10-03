@@ -6,10 +6,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"golang.org/x/crypto/bcrypt"
 	"io"
 	"log"
 	"net/http"
 	"os"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -359,7 +362,7 @@ func (h Handler) NewTokenPairFromRefreshTokenHandler(w http.ResponseWriter, r *h
 	resp.SuccessParse(w, http.StatusOK, "New token pair generated", response)
 }
 
-func (h Handler) ValidGithubUrlAndGetBranches(w http.ResponseWriter, r *http.Request) {
+func (h Handler) ValidGithubUrlAndGetBranchesHandler(w http.ResponseWriter, r *http.Request) {
 	//read the body and conver to string
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -396,6 +399,211 @@ func (h Handler) ValidGithubUrlAndGetBranches(w http.ResponseWriter, r *http.Req
 	response["valid"] = true
 
 	resp.SuccessParse(w, http.StatusOK, "valid github url", response)
+}
+
+func (h Handler) MockRegisterUserHandler(w http.ResponseWriter, r *http.Request) {
+	type Body struct {
+		//Email    string `json:"email"`
+		Password string `json:"password"`
+		Name     string `json:"name"`
+		UserID   string `json:"userID"`
+	}
+
+	//read the body and conver to string
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		resp.Errorf(w, http.StatusBadRequest, "error reading body: %v", err)
+		return
+	}
+
+	var bodyStruct Body
+	err = json.Unmarshal(body, &bodyStruct)
+	if err != nil {
+		resp.Errorf(w, http.StatusBadRequest, "error unmarshaling body: %v", err)
+		return
+	}
+
+	//bodyStruct.Email = strings.TrimSpace(strings.ToLower(bodyStruct.Email))
+	bodyStruct.Name = strings.TrimSpace(bodyStruct.Name)
+	if bodyStruct.Name == "" {
+		resp.Error(w, http.StatusBadRequest, "Name can't empty")
+		return
+	}
+
+	userIDInt, err := strconv.Atoi(bodyStruct.UserID)
+	if err != nil {
+		resp.Errorf(w, http.StatusBadRequest, "error converting userID to int: %v", err)
+		return
+	}
+
+	//connection to db
+	db, err := connectToDB()
+	if err != nil {
+		resp.Error(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	defer func(client *mongo.Client, ctx context.Context) {
+		err := client.Disconnect(ctx)
+		if err != nil {
+			log.Printf("[ERROR] Error disconnectiong from database: %v\n", err)
+		}
+	}(db.Client(), context.TODO())
+
+	//check if the user already exists
+	var student Student
+	err = db.Collection("users").FindOne(context.TODO(), bson.M{"userID": userIDInt}).Decode(student)
+	if err != nil {
+		if err != mongo.ErrNoDocuments {
+			resp.Error(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+	}
+
+	if student.Name != "" {
+		resp.Error(w, http.StatusBadRequest, "User already exists")
+		return
+	}
+
+	//hash the password
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(bodyStruct.Password), 8)
+	if err != nil {
+		resp.Error(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	//create the user
+	mockUser := struct {
+		UserID int `json:"userID"`
+		//Email        string    `bson:"email"`
+		Password     string    `bson:"password"`
+		Name         string    `bson:"name"`
+		Pfp          string    `bson:"pfp"`
+		CreationDate time.Time `bson:"creationDate"`
+		IsMock       bool      `bson:"isMock"`
+	}{
+		UserID: userIDInt,
+		//Email:        bodyStruct.Email,
+		Password:     string(hashedPassword),
+		Name:         bodyStruct.Name,
+		Pfp:          fmt.Sprintf("https://avatars.dicebear.com/api/bottts/%d.svg", userIDInt),
+		IsMock:       true,
+		CreationDate: time.Now(),
+	}
+
+	//insert the user
+	_, err = db.Collection("users").InsertOne(context.TODO(), mockUser)
+	if err != nil {
+		resp.Error(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	//create the access token
+	accessToken, refreshToken, err := GenerateTokenPair(userIDInt, db)
+	if err != nil {
+		resp.Error(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	//set the cookies
+	http.SetCookie(w, &http.Cookie{
+		Name:    "ipaas-access-token",
+		Path:    "/",
+		Value:   accessToken,
+		Expires: time.Now().Add(time.Hour),
+	})
+	http.SetCookie(w, &http.Cookie{
+		Name:    "ipaas-refresh-token",
+		Path:    "/",
+		Value:   refreshToken,
+		Expires: time.Now().Add(time.Hour * 24 * 7),
+	})
+
+	resp.Success(w, http.StatusOK, "Mock user created")
+}
+
+func (h Handler) MockLoginHandler(w http.ResponseWriter, r *http.Request) {
+	type Body struct {
+		//Email    string `json:"email"`
+		Password string `json:"password"`
+		Name     string `json:"user"`
+	}
+
+	//read the body and conver to string
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		resp.Errorf(w, http.StatusBadRequest, "error reading body: %v", err)
+		return
+	}
+
+	var bodyStruct Body
+	err = json.Unmarshal(body, &bodyStruct)
+	if err != nil {
+		resp.Errorf(w, http.StatusBadRequest, "error unmarshaling body: %v", err)
+		return
+	}
+
+	//bodyStruct.Email = strings.TrimSpace(strings.ToLower(bodyStruct.Email))
+	bodyStruct.Name = strings.TrimSpace(bodyStruct.Name)
+	if err != nil {
+		resp.Errorf(w, http.StatusBadRequest, "error converting userID to int: %v", err)
+		return
+	}
+
+	//connection to db
+	db, err := connectToDB()
+	if err != nil {
+		resp.Error(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	defer func(client *mongo.Client, ctx context.Context) {
+		err := client.Disconnect(ctx)
+		if err != nil {
+			log.Printf("[ERROR] Error disconnectiong from database: %v\n", err)
+		}
+	}(db.Client(), context.TODO())
+
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(bodyStruct.Password), 8)
+	if err != nil {
+		resp.Error(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	//check if the user already exists
+	var student Student
+	err = db.Collection("users").FindOne(context.TODO(), bson.M{"isMock": true, "name": bodyStruct.Name, "password": string(hashedPassword)}).Decode(student)
+	if err != nil {
+		if err != mongo.ErrNoDocuments {
+			resp.Error(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+	}
+	if strconv.Itoa(student.ID) == "" {
+		resp.Error(w, http.StatusBadRequest, "User does not exist")
+		return
+	}
+
+	//create the access token
+	accessToken, refreshToken, err := GenerateTokenPair(student.ID, db)
+	if err != nil {
+		resp.Error(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	//set the cookies
+	http.SetCookie(w, &http.Cookie{
+		Name:    "ipaas-access-token",
+		Path:    "/",
+		Value:   accessToken,
+		Expires: time.Now().Add(time.Hour),
+	})
+	http.SetCookie(w, &http.Cookie{
+		Name:    "ipaas-refresh-token",
+		Path:    "/",
+		Value:   refreshToken,
+		Expires: time.Now().Add(time.Hour * 24 * 7),
+	})
+
+	http.Redirect(w, r, "/user/", http.StatusSeeOther)
 }
 
 //!===========================PAGES HANDLERS
