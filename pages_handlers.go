@@ -23,6 +23,10 @@ func (h Handler) LoginPageHandler(w http.ResponseWriter, r *http.Request) {
 	http.ServeFile(w, r, "./pages/login.html")
 }
 
+func (h Handler) MockRegisterUserPageHandler(w http.ResponseWriter, r *http.Request) {
+	http.ServeFile(w, r, "./pages/mockRegistration.html")
+}
+
 func (h Handler) UserPageHandler(w http.ResponseWriter, r *http.Request) {
 	db, err := connectToDB()
 	if err != nil {

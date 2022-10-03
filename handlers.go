@@ -519,7 +519,7 @@ func (h Handler) MockRegisterUserHandler(w http.ResponseWriter, r *http.Request)
 		Expires: time.Now().Add(time.Hour * 24 * 7),
 	})
 
-	resp.Success(w, http.StatusOK, "Mock user created")
+	resp.Success(w, http.StatusCreated, "Mock user created")
 }
 
 func (h Handler) MockLoginHandler(w http.ResponseWriter, r *http.Request) {

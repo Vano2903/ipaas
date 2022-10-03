@@ -55,9 +55,9 @@ func main() {
 
 	mainRouter.HandleFunc("/", handler.UserPageHandler)
 	mainRouter.HandleFunc("/login", handler.LoginPageHandler)
+	mainRouter.HandleFunc("/mock", handler.MockRegisterUserPageHandler)
 	mainRouter.HandleFunc("/{studentID}", handler.PublicStudentPageHandler)
 	// mainRouter.HandleFunc("/{studentID}/{appID}", handler.PublicAppPageHandler)
-
 	//homepage for the logged user
 	mainRouter.HandleFunc("/user/", handler.UserPageHandler).Methods("GET")
 

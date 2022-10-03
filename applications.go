@@ -83,10 +83,10 @@ func (c ContainerController) CreateNewApplicationFromRepo(creatorID int, port, n
 	//!choose a restart policy
 	hostConfig := &container.HostConfig{
 		PortBindings: portBinding,
-		RestartPolicy: container.RestartPolicy{
-			Name:              "on-failure",
-			MaximumRetryCount: 3,
-		},
+		// RestartPolicy: container.RestartPolicy{
+		// 	Name:              "on-failure",
+		// 	MaximumRetryCount: 3,
+		// },
 	}
 
 	//create the container
