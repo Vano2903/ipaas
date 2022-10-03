@@ -74,6 +74,7 @@ func main() {
 	api := mainRouter.PathPrefix("/api").Subrouter()
 
 	//! PUBLIC HANDLERS
+	api.HandleFunc("/mock/create", handler.MockRegisterUserHandler).Methods("POST")
 	api.HandleFunc("/oauth", handler.OauthHandler).Methods("GET")
 	api.HandleFunc("/oauth/check/{randomID}", handler.CheckOauthState).Methods("GET")
 	api.HandleFunc("/tokens/new", handler.NewTokenPairFromRefreshTokenHandler).Methods("GET")
@@ -87,7 +88,7 @@ func main() {
 	//still kinda don't know what to do with this one, will probably return the homepage
 	userApiRouter.HandleFunc("/", handler.LoginHandler).Methods("GET")
 	//validate a GitHub repo and (if valid) returns the branches
-	userApiRouter.HandleFunc("/validate", handler.ValidGithubUrlAndGetBranches).Methods("POST")
+	userApiRouter.HandleFunc("/validate", handler.ValidGithubUrlAndGetBranchesHandler).Methods("POST")
 	//get all the applications (even the private one) must define the type (database, web, all)
 	userApiRouter.HandleFunc("/getApps/{type}", handler.GetAllApplicationsOfStudentPrivate).Methods("GET")
 	//update an application
