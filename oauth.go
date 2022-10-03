@@ -278,6 +278,7 @@ func GetStudentFromPaleoIDAccessToken(accessToken string) (Student, error) {
 
 	//parse the body into a student struct (from the json response)
 	var student Student
+	student.IsMock = false
 	err = json.Unmarshal(body, &student)
 	return student, err
 }
