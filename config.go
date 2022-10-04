@@ -6,6 +6,7 @@ import (
 	"crypto/rsa"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/joho/godotenv"
 	"go.mongodb.org/mongo-driver/bson"
@@ -13,13 +14,20 @@ import (
 )
 
 var (
-	privateKey *rsa.PrivateKey
-	publicKey  *rsa.PublicKey
-	handler    *Handler
-	Langs      []string
+	privateKey                   *rsa.PrivateKey
+	publicKey                    *rsa.PublicKey
+	handler                      *Handler
+	Langs                        []string
+	oauthStateCleaningInterval   = 5 * time.Minute
+	refreshTokenCleaningInterval = 5 * time.Minute
+	usersCleaningInterval        = 1 * time.Minute
+	pollingIDsCleaningInterval   = 10 * time.Second
+	executeCleaning              chan string
 )
 
 func init() {
+	executeCleaning = make(chan string)
+
 	//load the enviroment variables
 	err := godotenv.Load(".env")
 	if err != nil {

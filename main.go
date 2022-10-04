@@ -128,6 +128,16 @@ func main() {
 	log.Println("starting event handler")
 	go handler.cc.EventHandler()
 
+	go RunExecutor(
+		oauthStateCleaningInterval,
+		refreshTokenCleaningInterval,
+		usersCleaningInterval,
+		pollingIDsCleaningInterval,
+		executeCleaning,
+	)
+
+	go CheckExpiries(executeCleaning)
+
 	log.Println("starting the server on port 8080")
 	log.Fatal(http.ListenAndServe(":8080", handlers.CORS(originsOk, headersOk, methodsOk)(mainRouter)))
 }
