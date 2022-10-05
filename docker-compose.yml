@@ -24,7 +24,7 @@ services:
       ports:
         - 27017:27017
       volumes:
-        - ./ipaas-db-dump:/data/db
+        - ./_ipaas-db-dump:/data/db
       networks:
         - "ipaas"
 volumes:

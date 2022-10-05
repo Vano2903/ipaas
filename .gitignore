@@ -3,3 +3,4 @@ ipaas-db-dump/
 tmp/
 rabbitmq/
 .idea/
+_ipaas-db-dump/
