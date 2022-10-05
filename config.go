@@ -21,7 +21,7 @@ var (
 	oauthStateCleaningInterval   = 5 * time.Minute
 	refreshTokenCleaningInterval = 5 * time.Minute
 	usersCleaningInterval        = 1 * time.Minute
-	pollingIDsCleaningInterval   = 10 * time.Second
+	pollingIDsCleaningInterval   = 10 * time.Minute
 	executeCleaning              chan string
 )
 

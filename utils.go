@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/go-git/go-git/v5/plumbing"
-	"github.com/tidwall/gjson"
 	"io"
 	"math/rand"
 	"net"
@@ -14,6 +12,9 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/tidwall/gjson"
 
 	"github.com/go-git/go-git/v5"
 	"go.mongodb.org/mongo-driver/bson"
@@ -175,7 +176,7 @@ func (u Util) DownloadGithubRepo(userID int, branch, url string) (string, string
 		return "", "", "", err
 	}
 	fmt.Println("ok")
-	return fmt.Sprintf("%s", tmpPath), repoName, commitHash.Hash.String(), nil
+	return tmpPath, repoName, commitHash.Hash.String(), nil
 }
 
 // GetMetadataFromRepo gets the description, default branch and all the branches of a GitHub repository

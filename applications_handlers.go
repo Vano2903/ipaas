@@ -55,13 +55,13 @@ func (h Handler) NewApplicationHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	//download the repo
-	repo, name, hash, err := h.util.DownloadGithubRepo(student.ID, appPost.GithubBranch, appPost.GithubRepoUrl)
+	//download the repoPath
+	repoPath, name, hash, err := h.util.DownloadGithubRepo(student.ID, appPost.GithubBranch, appPost.GithubRepoUrl)
 	if err != nil {
 		resp.Errorf(w, http.StatusInternalServerError, "error downloading the repo, try again in one minute: %v", err.Error())
 		return
 	}
-	fmt.Println("repo: ", repo)
+	fmt.Println("repo: ", repoPath)
 	fmt.Println("name: ", name)
 	fmt.Println("hash: ", hash)
 
@@ -73,7 +73,7 @@ func (h Handler) NewApplicationHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	//create the image from the repo downloaded
-	imageName, imageID, err := h.cc.CreateImage(student.ID, port, name, repo, appPost.GithubBranch, appPost.Language, appPost.Envs)
+	imageName, imageID, err := h.cc.CreateImage(student.ID, port, name, appPost.GithubBranch, repoPath, appPost.Language, appPost.Envs)
 	if err != nil {
 		resp.Errorf(w, http.StatusInternalServerError, "error creating the image: %v", err.Error())
 		return
@@ -102,7 +102,7 @@ func (h Handler) NewApplicationHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	//remove the repo after creating the application
-	err = os.RemoveAll(repo)
+	err = os.RemoveAll(repoPath)
 	if err != nil {
 		resp.Errorf(w, http.StatusInternalServerError, "error removing the repo: %v", err)
 		return
