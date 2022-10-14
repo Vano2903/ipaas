@@ -37,7 +37,7 @@ Furthermore, IPaaS does not limit the number of applications that can be hosted 
 - run `$ docker-compose up --build -d`
 - go run .
 
-_**for the sorint reviewr i sent an email with a working .env file to hackersgen@sorint.it**_
+_**for the sorint reviewr i sent an email with a working .env file to hackersgen@sorint.it and make sure to create a tmp folder**_
 
 ### Example
 
