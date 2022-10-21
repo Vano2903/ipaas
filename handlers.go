@@ -52,7 +52,7 @@ func (h Handler) OauthHandler(w http.ResponseWriter, r *http.Request) {
 		//check if the state is valid (rsa encryption)
 		valid, redirectUri, state, err := CheckState(UrlState[0])
 		if err != nil {
-			resp.Error(w, http.StatusInternalServerError, err.Error())
+			resp.Error(w, http.StatusBadRequest, err.Error())
 			return
 		}
 		if !valid {
@@ -108,6 +108,7 @@ func (h Handler) OauthHandler(w http.ResponseWriter, r *http.Request) {
 		http.SetCookie(w, &http.Cookie{
 			Name:    "ipaas-session",
 			Value:   "",
+			Path:    "/",
 			Expires: time.Unix(0, 0),
 		})
 

@@ -3,10 +3,6 @@ package main
 import (
 	"bytes"
 	"context"
-	"crypto"
-	"crypto/rand"
-	"crypto/rsa"
-	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -100,18 +96,18 @@ func CreateState(redirectUri string, saveRedirectUri, savePollingId bool) (strin
 	}
 
 	//encrypt the state
-	encryptedBytes, err := rsa.EncryptOAEP(
-		sha256.New(),
-		rand.Reader,
-		publicKey,
-		[]byte(state),
-		nil)
-	if err != nil {
-		return "", "", err
-	}
+	//encryptedBytes, err := rsa.EncryptOAEP(
+	//	sha256.New(),
+	//	rand.Reader,
+	//	publicKey,
+	//	[]byte(state),
+	//	nil)
+	//if err != nil {
+	//	return "", "", err
+	//}
 
 	//encode the encrypted state with base64url
-	return base64.StdEncoding.EncodeToString(encryptedBytes), pollingID, nil
+	return base64.StdEncoding.EncodeToString([]byte(state)), pollingID, nil
 }
 
 // check if the encrypted state is valid and if so returnes true and delete the state from the database
@@ -125,10 +121,10 @@ func CheckState(cypher string) (valid bool, redirectUri string, state string, er
 	}
 
 	//decrypt the cypher with the private key
-	decryptedBytes, err := privateKey.Decrypt(nil, decoded, &rsa.OAEPOptions{Hash: crypto.SHA256})
-	if err != nil {
-		return false, "", "", err
-	}
+	//decryptedBytes, err := privateKey.Decrypt(nil, decoded, &rsa.OAEPOptions{Hash: crypto.SHA256})
+	//if err != nil {
+	//	return false, "", "", err
+	//}
 
 	db, err := connectToDB()
 	if err != nil {
@@ -137,7 +133,7 @@ func CheckState(cypher string) (valid bool, redirectUri string, state string, er
 	defer db.Client().Disconnect(context.TODO())
 
 	//check if the state is actually found
-	state = string(decryptedBytes)
+	state = string(decoded)
 	fmt.Println(state)
 
 	stateCollection := db.Collection("oauthStates")
