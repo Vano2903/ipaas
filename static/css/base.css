@@ -70,7 +70,7 @@ form{
 
 /*######## IMMMAGINI #########*/
 .card-wallet{
-    background-image: url("https://i.imgur.com/T0zxy9d.png");
+    background-image: url("/static/img/wallet.png");
     color: #e76d17a8;
     width: 100%;
     max-width: 350px;
@@ -86,7 +86,7 @@ form{
 }
 
 .card-newtravel{
-    background-image: url("https://i.imgur.com/rIFaK5m.png");
+    background-image: url("/static/img/travel.png");
     color: #0e994f80;
     width: 100%;
     max-width: 350px;
